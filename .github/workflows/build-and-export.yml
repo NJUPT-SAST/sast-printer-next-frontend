@@ -1,0 +1,69 @@
+name: Build and Export Frontend
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'package*.json'
+  pull_request:
+    branches: [ "main", "master" ]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'package*.json'
+  repository_dispatch:
+    types: [build-frontend]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Cache Vite build cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.vite
+          key: ${{ runner.os }}-vite-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/*.[jt]s', '**/*.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-${{ hashFiles('**/package-lock.json') }}-
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build static export
+        run: npm run build
+        env:
+          STATIC_EXPORT: 'true'
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist/
+          retention-days: 1
+
+      - name: Trigger Backend Workflow
+        # 通过 peter-evans/repository-dispatch 触发另一个仓库的 workflow
+        uses: peter-evans/repository-dispatch@v4
+        with:
+          token: ${{ secrets.CROSS_REPO_PAT }}
+          repository: NJUPT-SAST/sast-printer
+          event-type: build-backend
+          client-payload: '{"frontend_run_id": "${{ github.run_id }}"}'
