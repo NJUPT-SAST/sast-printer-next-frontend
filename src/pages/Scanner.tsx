@@ -16,6 +16,7 @@ export default function ScannerPage() {
   const [selectedScannerId, setSelectedScannerId] = useState<string>('');
   const [resolution, setResolution] = useState<string>('300');
   const [colorMode, setColorMode] = useState<string>('Color');
+  const [pipeline, setPipeline] = useState<string>('Scan as PNG');
 
   const [scanning, setScanning] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -76,19 +77,6 @@ export default function ScannerPage() {
   const resolutions = features['--resolution']?.constraint || [75, 150, 300, 600];
   const colorModes = features['--mode']?.constraint || ['Color', 'Gray', 'Lineart'];
 
-  useEffect(() => {
-    const scanner = devices.find((s) => s.id === selectedScannerId);
-    if (scanner) {
-      const feats = (scanner.features as Record<string, any>) || {};
-      const resList = feats['--resolution']?.constraint || [75, 150, 300, 600];
-      if (resList.includes(150) || resList.includes('150')) {
-        setResolution('150');
-      } else if (resList.length > 0) {
-        setResolution(resList[0].toString());
-      }
-    }
-  }, [selectedScannerId, devices]);
-
   const handleScan = async () => {
     if (!selectedScannerId) return;
     try {
@@ -99,7 +87,7 @@ export default function ScannerPage() {
           resolution: resolution,
           mode: colorMode,
         },
-        pipeline: 'JPG | @:pipeline.high-quality',
+        pipeline: pipeline,
       };
       
       const res = await submitScan(requestPayload);
@@ -200,6 +188,24 @@ export default function ScannerPage() {
               </div>
 
               {/* Action Button */}
+              
+              {/* Pipeline Selection */}
+              <div className="flex flex-col gap-2 mb-4">
+                <label className="text-sm font-medium text-gray-700">{t('scanner.format') || 'Format / Pipeline'}</label>
+                <select
+                  className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                  value={pipeline}
+                  onChange={(e) => setPipeline(e.target.value)}
+                  disabled={scanning}
+                >
+                  {((selectedScanner as any)?.pipelines || ['Scan as PNG', 'Scan as PDF']).map((p: string) => (
+                    <option key={p} value={p}>
+                      {p.replace('Scan as ', '')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <button
                 onClick={handleScan}
                 disabled={scanning || !selectedScannerId}

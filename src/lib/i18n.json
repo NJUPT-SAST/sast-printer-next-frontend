@@ -108,7 +108,8 @@
     "home.printService": "打印服务",
     "home.printServiceDesc": "提交文件到云端，选择附近打印机即刻输出",
     "home.scanService": "扫描服务",
-    "home.scanServiceDesc": "使用打印机扫描功能，一键将纸质文档电子化"
+    "home.scanServiceDesc": "使用打印机扫描功能，一键将纸质文档电子化",
+    "scanner.format": "输出格式"
   },
   "en": {
     "app.title": "SAST Cloud Printer",
@@ -219,6 +220,7 @@
     "home.printService": "Print Service",
     "home.printServiceDesc": "Submit files to the cloud and select a nearby printer for immediate output",
     "home.scanService": "Scan Service",
-    "home.scanServiceDesc": "Use your printer's scanning function to quickly digitize paper documents"
+    "home.scanServiceDesc": "Use your printer's scanning function to quickly digitize paper documents",
+    "scanner.format": "Output Format"
   }
 }
