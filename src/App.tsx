@@ -7,6 +7,7 @@ import Header from './components/Header';
 import Home from './pages/Home';
 import Jobs from './pages/Jobs';
 import Printers from './pages/Printers';
+import Scanner from './pages/Scanner';
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
                 <Route path="/" element={<Home />} />
                 <Route path="/jobs" element={<Jobs />} />
                 <Route path="/printers" element={<Printers />} />
+                <Route path="/scanner" element={<Scanner />} />
               </Routes>
             </main>
             <LanguageSwitcher />

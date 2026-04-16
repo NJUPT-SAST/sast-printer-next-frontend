@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '@/lib/api';
 import { useTranslation } from '@/lib/i18n';
-import { Printer as PrinterIcon, AlertCircle } from 'lucide-react';
+import { Printer as PrinterIcon, AlertCircle, BookOpen } from 'lucide-react';
 
 interface Printer {
   id: string;
@@ -94,8 +94,18 @@ export default function Home() {
 
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-6 w-full">
-      <div className="mb-6">
+      <div className="mb-6 flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">{t('home.title')}</h1>
+        <a 
+          href="https://njupt-sast.feishu.cn/wiki/XE8GwfP50igFVqkhKjzc3EpGntf" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <BookOpen className="w-4 h-4 mr-1.5" />
+          {/* @ts-ignore - Ignore missing key until types are updated */}
+          {t('home.userManual')}
+        </a>
       </div>
 
       {printers.length === 0 ? (

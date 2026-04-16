@@ -1,13 +1,23 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from '@/lib/i18n';
 
-import { ListTodo } from 'lucide-react';
+import { ListTodo, ScanLine } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 export default function Header() {
   const { t } = useTranslation();
   const pathname = useLocation().pathname;
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [hasClickedScanner, setHasClickedScanner] = useState(() => {
+    return localStorage.getItem('has_clicked_scanner') === 'true';
+  });
+
+  const handleScannerClick = () => {
+    if (!hasClickedScanner) {
+      setHasClickedScanner(true);
+      localStorage.setItem('has_clicked_scanner', 'true');
+    }
+  };
 
   useEffect(() => {
     const checkAuth = () => {
@@ -39,6 +49,21 @@ export default function Header() {
           <span className="font-extrabold text-xl text-gray-900 tracking-tight">{t('app.title')}</span>
         </Link>
         <nav className="flex space-x-1">
+          {pathname !== '/scanner' && (
+            <Link
+              to="/scanner"
+              onClick={handleScannerClick}
+              className="flex items-center text-sm font-medium text-gray-600 hover:text-green-600 hover:bg-green-50 px-3 py-2 rounded-lg transition-colors relative"
+            >
+              <ScanLine className="w-4 h-4 mr-1.5" />
+              {t('nav.scanner')}
+              {!hasClickedScanner && (
+                <span className="ml-1.5 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm animate-pulse">
+                  New
+                </span>
+              )}
+            </Link>
+          )}
           {isLoggedIn && pathname !== '/jobs' && (
             <Link 
               to="/jobs" 
