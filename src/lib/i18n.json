@@ -67,11 +67,11 @@
     "jobs.back": "返回打印机",
     "jobs.refreshing": "{s} 秒后刷新",
     "jobs.noJobs": "暂无打印任务",
-    "jobs.noJobsDesc": "您还没有提交任何打印任务。",
+    "jobs.noJobsDesc": "你还没有提交任何打印任务。",
     "jobs.cancel": "取消",
     "jobs.cancelling": "取消中...",
     "jobs.cancelConfirmTitle": "取消任务",
-    "jobs.cancelConfirmMsg": "您确定要取消这个打印任务吗？",
+    "jobs.cancelConfirmMsg": "你确定要取消这个打印任务吗？",
     "jobs.printer": "打印机",
     "jobs.file": "文件",
     "jobs.progress": "进度",
@@ -103,7 +103,12 @@
     "scanner.loadingDevices": "加载设备中...",
     "scanner.noDevices": "未找到扫描设备",
     "scanner.selectDevice": "请选择扫描仪",
-    "scanner.error": "加载扫描设备失败"
+    "scanner.error": "加载扫描设备失败",
+    "home.subtitle": "请选择你需要的服务，进行打印或扫描任务",
+    "home.printService": "打印服务",
+    "home.printServiceDesc": "提交文件到云端，选择附近打印机即刻输出",
+    "home.scanService": "扫描服务",
+    "home.scanServiceDesc": "使用打印机扫描功能，一键将纸质文档电子化"
   },
   "en": {
     "app.title": "SAST Cloud Printer",
@@ -209,6 +214,11 @@
     "scanner.loadingDevices": "Loading devices...",
     "scanner.noDevices": "No scanners found",
     "scanner.selectDevice": "Select a scanner",
-    "scanner.error": "Failed to load scanners"
+    "scanner.error": "Failed to load scanners",
+    "home.subtitle": "Please select the service you need to print or scan documents",
+    "home.printService": "Print Service",
+    "home.printServiceDesc": "Submit files to the cloud and select a nearby printer for immediate output",
+    "home.scanService": "Scan Service",
+    "home.scanServiceDesc": "Use your printer's scanning function to quickly digitize paper documents"
   }
 }

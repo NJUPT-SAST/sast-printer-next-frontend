@@ -7,6 +7,7 @@ import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf';
 import pdfWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import { ChevronLeft, PrinterIcon, UploadCloud, FileText, Loader2, RefreshCw, Download } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import PrinterList from '@/components/PrinterList';
 
 GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -371,6 +372,8 @@ function PrinterContent() {
 
     if (id) {
       fetchPrinter();
+    } else {
+      setLoading(false);
     }
   }, [id]);
 
@@ -450,11 +453,45 @@ function PrinterContent() {
         queryParams.append('duplex', duplex);
       }
       queryParams.append('collate', collate);
+
+      let finalPages = pages.trim();
       if (pageSet !== 'all') {
-        queryParams.append('page_set', pageSet);
+        const maxPage = previewPageCount;
+        if (!maxPage && !finalPages) {
+          toast({ message: t('printer.pageCountUnavailable') || 'Page count unavailable', type: 'error' });
+          setSubmitting(false);
+          return;
+        }
+
+        let pagesList: number[] = [];
+        if (!finalPages && maxPage) {
+          pagesList = Array.from({ length: maxPage }, (_, i) => i + 1);
+        } else {
+          const selectedPages = new Set<number>();
+          const parts = finalPages.split(',').map((p) => p.trim());
+          for (const part of parts) {
+            if (part.includes('-')) {
+              const [start, end] = part.split('-').map(Number);
+              for (let i = start; i <= end; i++) selectedPages.add(i);
+            } else if (part) {
+              selectedPages.add(Number(part));
+            }
+          }
+          pagesList = Array.from(selectedPages).sort((a, b) => a - b);
+        }
+
+        pagesList = pagesList.filter((p) => pageSet === 'odd' ? p % 2 !== 0 : p % 2 === 0);
+        finalPages = pagesList.join(',');
+
+        if (!finalPages) {
+          toast({ message: t('printer.pageRangeInvalid'), type: 'error' });
+          setSubmitting(false);
+          return;
+        }
       }
-      if (pages.trim()) {
-        queryParams.append('pages', pages.trim());
+
+      if (finalPages) {
+        queryParams.append('pages', finalPages);
       }
 
       const response = await api.post(`/jobs?${queryParams.toString()}`, formData, {
@@ -538,7 +575,7 @@ function PrinterContent() {
     );
   }
 
-  if (error || !printer) {
+  if (id && (error || !printer)) {
     return (
       <div className="p-4 max-w-2xl mx-auto mt-8">
         <div className="bg-red-50 text-red-700 p-4 rounded-xl border border-red-100">
@@ -552,6 +589,10 @@ function PrinterContent() {
         </div>
       </div>
     );
+  }
+
+  if (!id) {
+    return <PrinterList />;
   }
 
   return (

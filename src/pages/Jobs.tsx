@@ -173,7 +173,7 @@ export default function JobsPage() {
 
   if (loading && jobs.length === 0) {
     return (
-      <div className="p-4 space-y-4 max-w-4xl mx-auto w-full">
+      <div className="p-4 space-y-4 max-w-6xl mx-auto w-full">
         <div className="h-8 bg-gray-200 rounded w-1/4 mb-6 animate-pulse"></div>
         {[1, 2, 3].map((i) => (
           <div key={i} className="animate-pulse bg-white p-5 rounded-xl border border-gray-100 mb-4 h-24"></div>
@@ -220,8 +220,8 @@ export default function JobsPage() {
         </div>
       )}
 
-      <div className="max-w-4xl mx-auto p-4 sm:p-6 w-full">
-        <Link to="/" className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-900 mb-6 transition-colors">
+      <div className="max-w-6xl mx-auto p-4 sm:p-6 w-full">
+        <Link to="/printers" className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-900 mb-6 transition-colors">
           <ChevronLeft className="w-4 h-4 mr-1" />
           {t('nav.home')}
         </Link>
@@ -251,7 +251,7 @@ export default function JobsPage() {
             <FileText className="w-16 h-16 mx-auto text-gray-300 mb-4" />
             <h3 className="text-lg font-medium text-gray-900">{t('jobs.noJobs')}</h3>
             <p className="text-gray-500 mt-2 text-sm">{t('jobs.noJobsDesc')}</p>
-            <Link to="/" className="mt-6 inline-flex items-center text-blue-600 hover:text-blue-800 font-medium text-sm">
+            <Link to="/printers" className="mt-6 inline-flex items-center text-blue-600 hover:text-blue-800 font-medium text-sm">
               {t('nav.home')}
             </Link>
           </div>
