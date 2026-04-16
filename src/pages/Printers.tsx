@@ -643,9 +643,9 @@ function PrinterContent() {
             <PrinterIcon className="w-8 h-8 text-blue-600" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{printer.name}</h1>
-            <p className="text-gray-500 mt-1">{printer.location} &bull; {printer.model}</p>
-            {printer.description && <p className="text-sm text-gray-400 mt-2">{printer.description}</p>}
+            <h1 className="text-2xl font-bold text-gray-900">{printer?.name}</h1>
+            <p className="text-gray-500 mt-1">{printer?.location} &bull; {printer?.model}</p>
+            {printer?.description && <p className="text-sm text-gray-400 mt-2">{printer.description}</p>}
           </div>
         </div>
       </div>
@@ -769,19 +769,19 @@ function PrinterContent() {
                   <span className="ml-3 block text-sm font-medium text-gray-900">{t('printer.simplex')}</span>
                 </label>
 
-                <label className={`flex-1 w-full flex items-center p-3 border border-gray-200 rounded-xl cursor-pointer transition-colors ${printer.duplex_mode === 'off' || isDuplexDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}>
+                  <label className={`flex-1 w-full flex items-center p-3 border border-gray-200 rounded-xl cursor-pointer transition-colors ${printer?.duplex_mode === 'off' || isDuplexDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}>
                   <input
                     type="radio"
                     name="duplex"
                     value="true"
                     checked={duplex === 'true'}
                     onChange={() => setDuplex('true')}
-                    disabled={printer.duplex_mode === 'off' || isDuplexDisabled}
+                    disabled={printer?.duplex_mode === 'off' || isDuplexDisabled}
                     className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 disabled:opacity-50"
                   />
                   <div className="ml-3">
                     <span className="block text-sm font-medium text-gray-900">{t('printer.doubleSided')}</span>
-                    <span className="block text-xs text-gray-500">{t(printer.duplex_mode === 'auto' ? 'printer.auto' : 'printer.manual')}</span>
+                    <span className="block text-xs text-gray-500">{t(printer?.duplex_mode === 'auto' ? 'printer.auto' : 'printer.manual')}</span>
                   </div>
                 </label>
               </div>
