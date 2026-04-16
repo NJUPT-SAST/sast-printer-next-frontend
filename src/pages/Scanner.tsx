@@ -8,6 +8,7 @@ export default function ScannerPage() {
   const { t } = useTranslation();
   const { toast } = useUi();
 
+  const [, setScannerMapping] = useState<Record<string, string> | null>(null);
   const [devices, setDevices] = useState<Scanner[]>([]);
   const [loadingContext, setLoadingContext] = useState(true);
   const [errorContext, setErrorContext] = useState(false);
@@ -23,11 +24,38 @@ export default function ScannerPage() {
     async function load() {
       try {
         setLoadingContext(true);
+        
+        let mapping: Record<string, string> | null = null;
+        try {
+          const res = await fetch('/scannerMapping.json');
+          if (res.ok) {
+            mapping = await res.json();
+            setScannerMapping(mapping);
+          }
+        } catch (e) {
+          console.warn('Could not load scannerMapping.json', e);
+        }
+
         const data = await fetchContext();
         if (data && Array.isArray(data)) {
-          setDevices(data);
-          if (data.length > 0) {
-            setSelectedScannerId(data[0].id);
+          let finalDevices = data;
+          
+          if (mapping) {
+            finalDevices = data.filter((device) => {
+              return !!(mapping![device.name] || mapping![device.id]);
+            }).map((device) => {
+              const mappedName = mapping![device.name] || mapping![device.id];
+              return {
+                ...device,
+                name: mappedName,
+                model: undefined, // Clear model so we just display the mapped name
+              };
+            });
+          }
+          
+          setDevices(finalDevices);
+          if (finalDevices.length === 1) {
+            setSelectedScannerId(finalDevices[0].id);
           }
         }
       } catch (err) {
@@ -47,6 +75,19 @@ export default function ScannerPage() {
   
   const resolutions = features['--resolution']?.constraint || [75, 150, 300, 600];
   const colorModes = features['--mode']?.constraint || ['Color', 'Gray', 'Lineart'];
+
+  useEffect(() => {
+    const scanner = devices.find((s) => s.id === selectedScannerId);
+    if (scanner) {
+      const feats = (scanner.features as Record<string, any>) || {};
+      const resList = feats['--resolution']?.constraint || [75, 150, 300, 600];
+      if (resList.includes(150) || resList.includes('150')) {
+        setResolution('150');
+      } else if (resList.length > 0) {
+        setResolution(resList[0].toString());
+      }
+    }
+  }, [selectedScannerId, devices]);
 
   const handleScan = async () => {
     if (!selectedScannerId) return;
@@ -113,6 +154,9 @@ export default function ScannerPage() {
                   onChange={(e) => setSelectedScannerId(e.target.value)}
                   disabled={scanning}
                 >
+                  <option value="" disabled>
+                    {t('scanner.selectDevice') || 'Select a scanner'}
+                  </option>
                   {devices.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name} {s.model ? `(${s.model})` : ''}

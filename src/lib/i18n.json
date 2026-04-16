@@ -102,6 +102,7 @@
     "scanner.noPreview": "尚未扫描，此区域将显示扫描结果",
     "scanner.loadingDevices": "加载设备中...",
     "scanner.noDevices": "未找到扫描设备",
+    "scanner.selectDevice": "请选择扫描仪",
     "scanner.error": "加载扫描设备失败"
   },
   "en": {
@@ -207,6 +208,7 @@
     "scanner.noPreview": "No scan yet. Result will appear here.",
     "scanner.loadingDevices": "Loading devices...",
     "scanner.noDevices": "No scanners found",
+    "scanner.selectDevice": "Select a scanner",
     "scanner.error": "Failed to load scanners"
   }
 }
