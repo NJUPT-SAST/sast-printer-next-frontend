@@ -49,6 +49,7 @@ function PrinterContent() {
   const [copies, setCopies] = useState(1);
   const [duplex, setDuplex] = useState('off');
   const [collate, setCollate] = useState('true');
+  const [pageSet, setPageSet] = useState('all');
   const [pages, setPages] = useState('');
   const [pagesError, setPagesError] = useState('');
 
@@ -449,6 +450,9 @@ function PrinterContent() {
         queryParams.append('duplex', duplex);
       }
       queryParams.append('collate', collate);
+      if (pageSet !== 'all') {
+        queryParams.append('page_set', pageSet);
+      }
       if (pages.trim()) {
         queryParams.append('pages', pages.trim());
       }
@@ -551,7 +555,7 @@ function PrinterContent() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-4 sm:p-6 w-full pb-20">
+    <div className="max-w-6xl mx-auto p-4 sm:p-6 w-full pb-20">
       {manualDuplexHook && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl border border-gray-100 flex flex-col items-center">
@@ -605,11 +609,12 @@ function PrinterContent() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('printer.document')}</h2>
+      <form onSubmit={handleSubmit} className="flex flex-col lg:flex-row gap-6">
+        <div className="flex-1 space-y-6">
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('printer.document')}</h2>
 
-          <div className="mb-6">
+            <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.selectFile')} <span className="text-red-500">*</span></label>
             <div
               className={`group border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer
@@ -647,63 +652,9 @@ function PrinterContent() {
             </div>
           </div>
 
-          {file && (
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-gray-700">{t('printer.preview')}</label>
-                {previewError && (
-                  <button
-                    type="button"
-                    onClick={() => setPreviewVersion((v) => v + 1)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                    aria-label={t('printer.retryPreview')}
-                    title={t('printer.retryPreview')}
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                  </button>
-                )}
-                {!previewError && previewPdfUrl && !previewLoading && (
-                  <button
-                    type="button"
-                    onClick={handleDownloadPreview}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                    aria-label={t('printer.downloadFile')}
-                    title={t('printer.downloadFile')}
-                  >
-                    <Download className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
 
-              <div className="h-[480px] rounded-xl border border-gray-200 bg-gray-50 overflow-hidden">
-                {previewLoading && (
-                  <div className="w-full h-full flex items-center justify-center text-gray-600 text-sm">
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    {t('printer.previewGenerating')}
-                  </div>
-                )}
 
-                {!previewLoading && previewError && (
-                  <div className="w-full h-full flex items-center justify-center px-6 text-center text-red-600 text-sm">
-                    {previewError}
-                  </div>
-                )}
-
-                {!previewLoading && !previewError && previewImages.length > 0 && (
-                  <div className="h-full overflow-y-auto p-4 space-y-4 bg-gray-100">
-                    {previewImages.map((image, index) => (
-                      <div key={`preview-page-${index + 1}`} className="bg-white rounded-lg border border-gray-200 shadow-sm p-2">
-                        <p className="text-xs text-gray-500 mb-2">{t('printer.previewPage', { page: index + 1 })}</p>
-                        <img src={image} alt={t('printer.previewPage', { page: index + 1 })} className="w-full h-auto rounded" />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.copies')}</label>
               <input
@@ -728,7 +679,20 @@ function PrinterContent() {
               </select>
             </div>
 
-            <div className="sm:col-span-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.pageSet') || 'Page Set'}</label>
+              <select
+                value={pageSet}
+                onChange={(e) => setPageSet(e.target.value)}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white transition-shadow appearance-none"
+              >
+                <option value="all">{t('printer.pageSetAll') || 'All Pages'}</option>
+                <option value="odd">{t('printer.pageSetOdd') || 'Odd Pages'}</option>
+                <option value="even">{t('printer.pageSetEven') || 'Even Pages'}</option>
+              </select>
+            </div>
+
+            <div className="sm:col-span-3">
               <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.pageRange')}</label>
               <input
                 type="text"
@@ -749,7 +713,7 @@ function PrinterContent() {
               <p className="mt-1 text-xs text-gray-500">{t('printer.pageRangeHelp')}</p>
             </div>
 
-            <div className="sm:col-span-2">
+            <div className="sm:col-span-3">
               <label className="block text-sm font-medium text-gray-700 mb-2">{t('common.duplex')}</label>
               <div className="flex gap-4">
                 <label className="flex-1 w-full flex items-center p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
@@ -788,28 +752,88 @@ function PrinterContent() {
             </div>
           </div>
         </div>
+        </div>
 
-        <div className="pt-4 flex">
-          <button
-            type="submit"
-            disabled={!file || submitting}
-            className={`w-full flex justify-center items-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-base font-medium text-white transition-all
-              ${!file || submitting
-                ? 'bg-blue-300 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 hover:shadow'}`}
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                {t('printer.submitting')}
-              </>
-            ) : (
-              <>
-                <PrinterIcon className="w-5 h-5 mr-2" />
-                {t('printer.submit')}
-              </>
-            )}
-          </button>
+        {/* Right Column */}
+        <div className="w-full lg:w-[400px] xl:w-[500px] flex flex-col space-y-6">
+          {file && (
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex-1">
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">{t('printer.preview')}</label>
+                {previewError && (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewVersion((v) => v + 1)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                    aria-label={t('printer.retryPreview')}
+                    title={t('printer.retryPreview')}
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </button>
+                )}
+                {!previewError && previewPdfUrl && !previewLoading && (
+                  <button
+                    type="button"
+                    onClick={handleDownloadPreview}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                    aria-label={t('printer.downloadFile')}
+                    title={t('printer.downloadFile')}
+                  >
+                    <Download className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              <div className="h-[480px] rounded-xl border border-gray-200 bg-gray-50 overflow-hidden flex flex-col">
+                {previewLoading && (
+                  <div className="w-full h-full flex items-center justify-center text-gray-600 text-sm">
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    {t('printer.previewGenerating')}
+                  </div>
+                )}
+
+                {!previewLoading && previewError && (
+                  <div className="w-full h-full flex items-center justify-center px-6 text-center text-red-600 text-sm">
+                    {previewError}
+                  </div>
+                )}
+
+                {!previewLoading && !previewError && previewImages.length > 0 && (
+                  <div className="h-full overflow-y-auto p-4 space-y-4 bg-gray-100 flex-1">
+                    {previewImages.map((image, index) => (
+                      <div key={`preview-page-${index + 1}`} className="bg-white rounded-lg border border-gray-200 shadow-sm p-2">
+                        <p className="text-xs text-gray-500 mb-2">{t('printer.previewPage', { page: index + 1 })}</p>
+                        <img src={image} alt={t('printer.previewPage', { page: index + 1 })} className="w-full h-auto rounded" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+            <button
+              type="submit"
+              disabled={!file || submitting}
+              className={`w-full flex justify-center items-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-base font-medium text-white transition-all
+                ${!file || submitting
+                  ? 'bg-blue-300 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 hover:shadow'}`}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  {t('printer.submitting')}
+                </>
+              ) : (
+                <>
+                  <PrinterIcon className="w-5 h-5 mr-2" />
+                  {t('printer.submit')}
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </form>
     </div>

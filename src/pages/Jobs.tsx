@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '@/lib/api';
 import { useTranslation } from '@/lib/i18n';
@@ -29,6 +29,9 @@ export default function JobsPage() {
   const [manualDuplexHook, setManualDuplexHook] = useState<{ url: string, expiresAt: string } | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [submittingDuplex, setSubmittingDuplex] = useState(false);
+
+  const jobsRef = useRef<PrintJob[]>([]);
+  useEffect(() => { jobsRef.current = jobs; }, [jobs]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -108,16 +111,16 @@ export default function JobsPage() {
   };
 
   useEffect(() => {
-    fetchJobs();
-
+    let requestCount = 0;
     // Auto refresh every 5 seconds
     const interval = setInterval(() => {
-      const hasActive = jobs.some(j => ['pending', 'held', 'processing', 'pending_manual_continue'].includes(j.status));
-      if (hasActive) {
+      requestCount++;
+      const hasActive = jobsRef.current.some((j: { status: string; }) => ['pending', 'held', 'processing', 'pending_manual_continue'].includes(j.status));
+      if (requestCount <= 2 || hasActive) {
         fetchJobs(true);
       }
     }, 5000);
-    
+
     return () => clearInterval(interval);
   }, []);
 
