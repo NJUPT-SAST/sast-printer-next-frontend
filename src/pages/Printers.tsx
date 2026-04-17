@@ -3,13 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '@/lib/api';
 import { useTranslation } from '@/lib/i18n';
 import { useUi } from '@/components/ui-context';
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf';
-import pdfWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import { ChevronLeft, PrinterIcon, UploadCloud, FileText, Loader2, RefreshCw, Download } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PrinterList from '@/components/PrinterList';
-
-GlobalWorkerOptions.workerSrc = pdfWorker;
+import { DocumentPreview, renderPdfToImages } from '@/components/DocumentPreview';
 
 interface PrinterInfo {
   id: string;
@@ -193,34 +190,6 @@ function PrinterContent() {
     if ((previewPageCount !== null && previewPageCount <= 1) || getSelectedPageCount(value, previewPageCount) === 1) {
       setDuplex('off');
     }
-  };
-
-  const renderPdfToImages = async (blob: Blob) => {
-    const data = await blob.arrayBuffer();
-    const task = getDocument({ data });
-    const doc = await task.promise;
-    const totalPages = doc.numPages;
-    const images: string[] = [];
-
-    for (let pageNum = 1; pageNum <= totalPages; pageNum += 1) {
-      const page = await doc.getPage(pageNum);
-      const viewport = page.getViewport({ scale: 1.2 });
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-
-      if (!context) {
-        continue;
-      }
-
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-
-      await page.render({ canvas, canvasContext: context, viewport }).promise;
-      images.push(canvas.toDataURL('image/png'));
-    }
-
-    await doc.destroy();
-    return { totalPages, images };
   };
 
   useEffect(() => {
@@ -632,7 +601,7 @@ function PrinterContent() {
           </div>
         </div>
       )}
-      <Link to="/" className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-900 mb-6 transition-colors">
+      <Link to="/printers" className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-900 mb-6 transition-colors">
         <ChevronLeft className="w-4 h-4 mr-1" />
         {t('printer.back')}
       </Link>
@@ -650,9 +619,9 @@ function PrinterContent() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col lg:flex-row gap-6">
-        <div className="flex-1 space-y-6">
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+      <form onSubmit={handleSubmit} className="flex flex-col lg:flex-row gap-6 items-stretch">
+        <div className="flex-1 flex flex-col space-y-6">
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex-1">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('printer.document')}</h2>
 
             <div className="mb-6">
@@ -692,8 +661,6 @@ function PrinterContent() {
               )}
             </div>
           </div>
-
-
 
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
             <div>
@@ -800,7 +767,7 @@ function PrinterContent() {
           {file && (
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex-1">
               <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-gray-700">{t('printer.preview')}</label>
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('printer.preview')}</h2>
                 {previewError && (
                   <button
                     type="button"
@@ -825,31 +792,11 @@ function PrinterContent() {
                 )}
               </div>
 
-              <div className="h-[480px] rounded-xl border border-gray-200 bg-gray-50 overflow-hidden flex flex-col">
-                {previewLoading && (
-                  <div className="w-full h-full flex items-center justify-center text-gray-600 text-sm">
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    {t('printer.previewGenerating')}
-                  </div>
-                )}
-
-                {!previewLoading && previewError && (
-                  <div className="w-full h-full flex items-center justify-center px-6 text-center text-red-600 text-sm">
-                    {previewError}
-                  </div>
-                )}
-
-                {!previewLoading && !previewError && previewImages.length > 0 && (
-                  <div className="h-full overflow-y-auto p-4 space-y-4 bg-gray-100 flex-1">
-                    {previewImages.map((image, index) => (
-                      <div key={`preview-page-${index + 1}`} className="bg-white rounded-lg border border-gray-200 shadow-sm p-2">
-                        <p className="text-xs text-gray-500 mb-2">{t('printer.previewPage', { page: index + 1 })}</p>
-                        <img src={image} alt={t('printer.previewPage', { page: index + 1 })} className="w-full h-auto rounded" />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <DocumentPreview
+                images={previewImages}
+                loading={previewLoading}
+                error={previewError}
+              />
             </div>
           )}
 

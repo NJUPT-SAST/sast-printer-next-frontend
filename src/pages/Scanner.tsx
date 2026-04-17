@@ -3,10 +3,7 @@ import { useTranslation } from '@/lib/i18n';
 import { useUi } from '@/components/ui-context';
 import { fetchContext, submitScan, downloadScanFile, getScanFiles, deleteScanFile, type Scanner, type PaperSize, type ScanFile } from '@/lib/scannerApi';
 import { Download, Loader2, Scan, RefreshCw, ChevronDown, ChevronUp, FolderOpen, X } from 'lucide-react';
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf';
-import pdfWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
-
-GlobalWorkerOptions.workerSrc = pdfWorker;
+import { DocumentPreview, renderPdfToImages } from '@/components/DocumentPreview';
 
 export default function ScannerPage() {
   const { t, locale } = useTranslation();
@@ -77,34 +74,6 @@ export default function ScannerPage() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [previewFilename, setPreviewFilename] = useState<string | null>(null);
   const [previewImages, setPreviewImages] = useState<string[]>([]);
-
-  const renderPdfToImages = async (blob: Blob) => {
-    const data = await blob.arrayBuffer();
-    const task = getDocument({ data });
-    const doc = await task.promise;
-    const totalPages = doc.numPages;
-    const images: string[] = [];
-
-    for (let pageNum = 1; pageNum <= totalPages; pageNum += 1) {
-      const page = await doc.getPage(pageNum);
-      const viewport = page.getViewport({ scale: 1.2 });
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-
-      if (!context) {
-        continue;
-      }
-
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-
-      await page.render({ canvas, canvasContext: context, viewport }).promise;
-      images.push(canvas.toDataURL('image/png'));
-    }
-
-    await doc.destroy();
-    return { totalPages, images };
-  };
 
   const formatBytes = (bytes: number, decimals = 2) => {
     if (!+bytes) return '0 B';
@@ -220,7 +189,7 @@ export default function ScannerPage() {
             setPreviewImages([]);
           }
         } else {
-          setPreviewImages([]);
+          setPreviewImages([objectUrl]);
         }
         toast({ message: t('scanner.success') || 'Scan completed successfully', type: 'success' });
         fetchFiles();
@@ -641,26 +610,10 @@ export default function ScannerPage() {
                   </div>
                 </div>
               ) : imageUrl ? (
-                previewFilename?.toLowerCase().endsWith('.pdf') ? (
-                  previewImages.length > 0 ? (
-                    <div className="h-full w-full overflow-y-auto p-4 space-y-4 bg-gray-100 flex-1">
-                      {previewImages.map((image, index) => (
-                        <div key={`preview-page-${index + 1}`} className="bg-white rounded-lg border border-gray-200 shadow-sm p-2">
-                          <p className="text-xs text-gray-500 mb-2">{t('scanner.previewPage', { page: index + 1 }) || `Page ${index + 1}`}</p>
-                          <img src={image} alt={`Page ${index + 1}`} className="w-full h-auto rounded" />
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <object data={imageUrl} type="application/pdf" className="w-full h-full rounded-lg shadow-md border border-gray-200"></object>
-                  )
-                ) : (
-                  <img
-                    src={imageUrl}
-                    alt="Scan preview"
-                    className="max-w-full max-h-full object-contain shadow-md border border-gray-200"
-                  />
-                )
+                <DocumentPreview
+                  images={previewImages}
+                  fallbackNode={<object data={imageUrl} type="application/pdf" className="w-full h-full rounded-lg shadow-md border border-gray-200"></object>}
+                />
               ) : (
                 <div className="text-gray-400 flex flex-col items-center gap-2">
                   <Scan className="w-12 h-12 opacity-20" />
