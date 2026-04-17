@@ -55,7 +55,19 @@ export default function ScannerPage() {
   }, []);
 
   useEffect(() => {
-    setAdvancedSettings({});
+    let initialAdvancedSettings: Record<string, any> = {};
+    
+    const a4Size = paperSizes.find(p => p.name.toLowerCase().includes('a4'));
+    if (a4Size) {
+      initialAdvancedSettings = {
+        width: a4Size.dimensions.x,
+        height: a4Size.dimensions.y,
+        pageWidth: a4Size.dimensions.x,
+        pageHeight: a4Size.dimensions.y
+      };
+    }
+
+    setAdvancedSettings(initialAdvancedSettings);
     setSelectedFilters([]);
     setShowAdvanced(false);
 
@@ -69,7 +81,7 @@ export default function ScannerPage() {
         return prevPipeline;
       });
     }
-  }, [selectedScannerId, devices]);
+  }, [selectedScannerId, devices, paperSizes]);
 
   const [scanning, setScanning] = useState(false);
   const [downloadingFile, setDownloadingFile] = useState(false);
@@ -250,8 +262,8 @@ export default function ScannerPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-4 sm:p-6 w-full flex-1 min-h-[calc(100vh-4rem)] relative">
-      <div className="flex justify-between items-center mb-6">
+    <div className={`max-w-6xl mx-auto p-4 sm:p-6 w-full flex-1 flex flex-col relative ${imageUrl ? 'h-[calc(100vh-4rem)]' : ''}`}>
+      <div className="flex justify-between items-center mb-6 shrink-0">
         <h1 className="text-2xl font-bold text-gray-900">{t('scanner.title')}</h1>
         <button
           onClick={() => setIsFileListModalOpen(true)}
@@ -262,7 +274,7 @@ export default function ScannerPage() {
         </button>
       </div>
       
-      <div className="bg-yellow-50 border-l-4 border-yellow-200 p-4 mb-6 rounded-r-lg w-full">
+      <div className="bg-yellow-50 border-l-4 border-yellow-200 p-4 mb-6 rounded-r-lg w-full shrink-0">
         <div className="flex items-start">
           <div className="flex-shrink-0">
             <svg className="h-6 w-6 text-yellow-600" viewBox="0 0 20 20" fill="currentColor">
@@ -277,9 +289,9 @@ export default function ScannerPage() {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 h-full min-h-[600px]">
+      <div className={`flex flex-col lg:flex-row gap-6 items-stretch flex-1 ${imageUrl ? 'min-h-0' : ''}`}>
         {/* Sidebar Settings */}
-        <div className="w-full lg:w-80 flex flex-col gap-6 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className={`w-full lg:w-80 flex flex-col gap-6 bg-white p-6 rounded-xl shadow-sm border border-gray-100 ${imageUrl ? 'overflow-y-auto' : ''}`}>
           
           {loadingContext ? (
             <div className="flex items-center gap-2 text-gray-500">
@@ -392,8 +404,17 @@ export default function ScannerPage() {
                           <label className="text-sm text-gray-600">{t('scanner.paperSize') || 'Paper Size'}</label>
                           <select
                             className="p-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            value={advancedSettings.width && advancedSettings.height ? `${advancedSettings.width},${advancedSettings.height}` : ''}
                             onChange={(e) => {
-                              if (e.target.value === '') return;
+                              if (e.target.value === '') {
+                                const newSettings = { ...advancedSettings };
+                                delete newSettings.width;
+                                delete newSettings.height;
+                                delete newSettings.pageWidth;
+                                delete newSettings.pageHeight;
+                                setAdvancedSettings(newSettings);
+                                return;
+                              }
                               const [w, h] = e.target.value.split(',').map(Number);
                               setAdvancedSettings({
                                 ...advancedSettings, 
@@ -404,7 +425,6 @@ export default function ScannerPage() {
                               });
                             }}
                             disabled={scanning}
-                            defaultValue=""
                           >
                             <option value="">{t('scanner.customSize') || 'Custom / Select size...'}</option>
                             {paperSizes.map((ps) => (
@@ -540,7 +560,7 @@ export default function ScannerPage() {
               )}
 
               {/* Action Area: Format + Scan Button */}
-              <div className="mt-4 pt-4 border-t border-gray-200 flex items-center gap-3">
+              <div className="mt-auto pt-4 border-t border-gray-200 flex items-center gap-3">
                 <select
                   className="p-3 w-[120px] sm:w-[140px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white font-medium text-sm text-gray-700"
                   value={pipeline}
@@ -573,9 +593,9 @@ export default function ScannerPage() {
         </div>
 
         {/* Preview Area */}
-        <div className="flex-1 flex flex-col gap-6">
-          <div className="flex-1 flex flex-col bg-gray-50 rounded-xl border border-gray-200 overflow-hidden relative min-h-[400px]">
-            <div className="p-4 border-b border-gray-200 bg-white flex justify-between items-center">
+        <div className={`flex-1 flex flex-col gap-6 ${imageUrl ? 'min-h-0' : ''}`}>
+          <div className={`flex-1 flex flex-col bg-gray-50 rounded-xl border border-gray-200 overflow-hidden relative ${imageUrl ? 'min-h-0' : 'min-h-[400px]'}`}>
+            <div className="p-4 border-b border-gray-200 bg-white flex justify-between items-center shrink-0">
               <h2 className="font-medium text-gray-800 flex items-center gap-2">
                 <Scan className="w-4 h-4 text-gray-500" />
                 {t('scanner.preview')}
@@ -591,22 +611,22 @@ export default function ScannerPage() {
               )}
             </div>
             
-            <div className="flex-1 p-6 flex items-center justify-center overflow-auto">
+            <div className="flex-1 p-6 overflow-hidden flex flex-col">
               {scanning && !downloadingFile ? (
-                <div className="flex flex-col items-center gap-3 text-gray-400">
+                <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-gray-400">
                   <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
                   <p className="animate-pulse">{t('scanner.scanning')}</p>
                 </div>
               ) : downloadingFile ? (
-                <div className="flex flex-col items-center gap-4 text-gray-600 w-full max-w-sm">
+                <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-gray-600">
                   <Download className="w-12 h-12 text-blue-500 animate-bounce" />
-                  <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                  <div className="w-full max-w-sm bg-gray-200 rounded-full h-2.5 overflow-hidden">
                     <div 
                       className="bg-blue-600 h-2.5 rounded-full transition-all duration-300 ease-out" 
                       style={{ width: `${Math.min(100, Math.max(0, downloadProgress))}%` }}
                     ></div>
                   </div>
-                  <div className="flex justify-between w-full text-sm font-medium">
+                  <div className="flex justify-between w-full max-w-sm text-sm font-medium">
                     <span>{t('scanner.downloading') || 'Downloading preview...'}</span>
                     <span>{downloadProgress}% ({formatBytes(downloadLoaded)} / {downloadTotal > 0 ? formatBytes(downloadTotal) : '?'})</span>
                   </div>
@@ -617,7 +637,7 @@ export default function ScannerPage() {
                   fallbackNode={<object data={imageUrl} type="application/pdf" className="w-full h-full rounded-lg shadow-md border border-gray-200"></object>}
                 />
               ) : (
-                <div className="text-gray-400 flex flex-col items-center gap-2">
+                <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 gap-2">
                   <Scan className="w-12 h-12 opacity-20" />
                   <p>{t('scanner.noPreview')}</p>
                 </div>

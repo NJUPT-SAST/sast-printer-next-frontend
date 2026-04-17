@@ -766,8 +766,8 @@ function PrinterContent() {
         {/* Right Column */}
         <div className="w-full lg:w-[400px] xl:w-[500px] flex flex-col space-y-6">
           {file && (
-            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex-1">
-              <div className="flex items-center justify-between mb-2">
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex-1 flex flex-col min-h-0">
+              <div className="flex items-center justify-between mb-2 shrink-0">
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('printer.preview')}</h2>
                 {previewError && (
                   <button

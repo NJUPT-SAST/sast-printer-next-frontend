@@ -136,6 +136,24 @@ export const submitScan = async (
 };
 
 /**
+ * Helper to get MIME type from filename extension
+ */
+const getMimeTypeFromFilename = (filename: string): string => {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'pdf':
+      return 'application/pdf';
+    case 'png':
+      return 'image/png';
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    default:
+      return 'application/octet-stream';
+  }
+};
+
+/**
  * Fetch a scanned file as a Blob.
  */
 export const downloadScanFile = async (
@@ -153,7 +171,9 @@ export const downloadScanFile = async (
       }
     },
   });
-  return response.data;
+  
+  const mimeType = getMimeTypeFromFilename(filename);
+  return new Blob([response.data], { type: mimeType });
 };
 
 export default scannerApi;
