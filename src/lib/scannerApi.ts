@@ -48,8 +48,14 @@ export interface Scanner {
   [key: string]: unknown;
 }
 
+export interface PaperSize {
+  name: string;
+  dimensions: { x: number; y: number };
+}
+
 export interface ScannerContext {
   devices: Scanner[];
+  paperSizes?: PaperSize[];
   [key: string]: unknown;
 }
 
@@ -65,22 +71,74 @@ export interface ScanRequest {
 }
 
 export interface ScanResponse {
+  file: ScanFile;
   [key: string]: unknown;
 }
+
+export interface ScanFile {
+  fullname: string;
+  extension: string;
+  lastModified: number | string;
+  size: number;
+  sizeString: string;
+  isDirectory: boolean;
+  name: string;
+  path: string;
+}
+
+/**
+ * Get the list of scanned files on the server.
+ */
+export const getScanFiles = async (): Promise<ScanFile[]> => {
+  const response = await scannerApi.get<ScanFile[]>('/files');
+  return response.data;
+};
+
+/**
+ * Delete a scanned file from the server.
+ */
+export const deleteScanFile = async (filename: string): Promise<void> => {
+  await scannerApi.delete(`/files/${filename}`);
+};
+
 
 /**
  * Retrieve available scanners and configuration.
  */
-export const fetchContext = async (): Promise<Scanner[]> => {
-  const response = await scannerApi.get<{devices: Scanner[]}>('/context');
-  return response.data.devices || [];
+export const fetchContext = async (): Promise<{ devices: Scanner[], paperSizes: PaperSize[] }> => {
+  const response = await scannerApi.get<ScannerContext>('/context?_t=' + Date.now());
+  return {
+    devices: response.data.devices || [],
+    paperSizes: response.data.paperSizes || []
+  };
 };
 
 /**
  * Send a ScanRequest and return a ScanResponse.
  */
 export const submitScan = async (request: ScanRequest): Promise<ScanResponse> => {
-  const response = await scannerApi.post<ScanResponse>('/scan', request);
+  const response = await scannerApi.post<ScanResponse>('/scan?_t=' + Date.now(), request);
+  return response.data;
+};
+
+/**
+ * Fetch a scanned file as a Blob.
+ */
+export const downloadScanFile = async (
+  filename: string,
+  onProgress?: (event: { loaded: number; total?: number }) => void
+): Promise<Blob> => {
+  const response = await scannerApi.get<Blob>(`/files/${filename}`, {
+    responseType: 'blob',
+    onDownloadProgress: (progressEvent) => {
+      if (onProgress) {
+        onProgress({
+          loaded: progressEvent.loaded,
+          total: progressEvent.total,
+        });
+      }
+    },
+  });
   return response.data;
 };
 
