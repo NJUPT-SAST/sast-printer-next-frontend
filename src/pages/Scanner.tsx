@@ -46,7 +46,12 @@ export default function ScannerPage() {
   };
 
   useEffect(() => {
-    fetchFiles();
+    const init = async () => {
+      await loadDevices();
+      await fetchFiles();
+    };
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -129,10 +134,7 @@ export default function ScannerPage() {
     }
   };
 
-  useEffect(() => {
-    loadDevices();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
 
 
   const selectedScanner = devices.find((s) => s.id === selectedScannerId);

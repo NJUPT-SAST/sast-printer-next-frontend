@@ -1,15 +1,15 @@
-import axios from 'axios';
+import axios from "axios";
 
 // Create an API service module pointing to the proxied '/sane-api/api/v1' endpoint
 const scannerApi = axios.create({
-  baseURL: '/sane-api/api/v1',
+  baseURL: "/sane-api/api/v1",
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
 });
 
 scannerApi.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem("token");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -18,13 +18,18 @@ scannerApi.interceptors.request.use((config) => {
 
 scannerApi.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/';
+      if (!error.config._retry) {
+        error.config._retry = true;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        return scannerApi(error.config);
+      }
+      localStorage.removeItem("token");
+      window.location.href = "/";
     }
     return Promise.reject(error);
-  }
+  },
 );
 
 export interface ScannerOption {
@@ -90,7 +95,7 @@ export interface ScanFile {
  * Get the list of scanned files on the server.
  */
 export const getScanFiles = async (): Promise<ScanFile[]> => {
-  const response = await scannerApi.get<ScanFile[]>('/files');
+  const response = await scannerApi.get<ScanFile[]>("/files");
   return response.data;
 };
 
@@ -101,23 +106,32 @@ export const deleteScanFile = async (filename: string): Promise<void> => {
   await scannerApi.delete(`/files/${filename}`);
 };
 
-
 /**
  * Retrieve available scanners and configuration.
  */
-export const fetchContext = async (): Promise<{ devices: Scanner[], paperSizes: PaperSize[] }> => {
-  const response = await scannerApi.get<ScannerContext>('/context?_t=' + Date.now());
+export const fetchContext = async (): Promise<{
+  devices: Scanner[];
+  paperSizes: PaperSize[];
+}> => {
+  const response = await scannerApi.get<ScannerContext>(
+    "/context?_t=" + Date.now(),
+  );
   return {
     devices: response.data.devices || [],
-    paperSizes: response.data.paperSizes || []
+    paperSizes: response.data.paperSizes || [],
   };
 };
 
 /**
  * Send a ScanRequest and return a ScanResponse.
  */
-export const submitScan = async (request: ScanRequest): Promise<ScanResponse> => {
-  const response = await scannerApi.post<ScanResponse>('/scan?_t=' + Date.now(), request);
+export const submitScan = async (
+  request: ScanRequest,
+): Promise<ScanResponse> => {
+  const response = await scannerApi.post<ScanResponse>(
+    "/scan?_t=" + Date.now(),
+    request,
+  );
   return response.data;
 };
 
@@ -126,10 +140,10 @@ export const submitScan = async (request: ScanRequest): Promise<ScanResponse> =>
  */
 export const downloadScanFile = async (
   filename: string,
-  onProgress?: (event: { loaded: number; total?: number }) => void
+  onProgress?: (event: { loaded: number; total?: number }) => void,
 ): Promise<Blob> => {
   const response = await scannerApi.get<Blob>(`/files/${filename}`, {
-    responseType: 'blob',
+    responseType: "blob",
     onDownloadProgress: (progressEvent) => {
       if (onProgress) {
         onProgress({

@@ -211,24 +211,6 @@ function PrinterContent() {
   }, [manualDuplexHook]);
 
   useEffect(() => {
-    const fetchSupportedFileTypes = async () => {
-      try {
-        const response = await api.get<SupportedFileTypesResponse>('/jobs/supported-file-types');
-        const types = (response.data.supported_file_types || [])
-          .map((item) => String(item || '').trim().toLowerCase())
-          .filter(Boolean);
-
-        const uniqueTypes = Array.from(new Set(types));
-        setSupportedFileTypes(uniqueTypes.length > 0 ? uniqueTypes : ['pdf']);
-      } catch (err: unknown) {
-        setSupportedFileTypes(['pdf']);
-      }
-    };
-
-    fetchSupportedFileTypes();
-  }, []);
-
-  useEffect(() => {
     if (!file) {
       setPreviewLoading(false);
       setPreviewError(null);
@@ -321,6 +303,20 @@ function PrinterContent() {
   }, [duplex, isDuplexDisabled]);
 
   useEffect(() => {
+    const fetchSupportedFileTypes = async () => {
+      try {
+        const response = await api.get<SupportedFileTypesResponse>('/jobs/supported-file-types');
+        const types = (response.data.supported_file_types || [])
+          .map((item) => String(item || '').trim().toLowerCase())
+          .filter(Boolean);
+
+        const uniqueTypes = Array.from(new Set(types));
+        setSupportedFileTypes(uniqueTypes.length > 0 ? uniqueTypes : ['pdf']);
+      } catch (err: unknown) {
+        setSupportedFileTypes(['pdf']);
+      }
+    };
+
     const fetchPrinter = async () => {
       try {
         const response = await api.get(`/printers/${id}`);
@@ -339,12 +335,17 @@ function PrinterContent() {
       }
     };
 
-    if (id) {
-      fetchPrinter();
-    } else {
-      setLoading(false);
-    }
-  }, [id]);
+    const init = async () => {
+      if (id) {
+        await fetchPrinter();
+      } else {
+        setLoading(false);
+      }
+      await fetchSupportedFileTypes();
+    };
+
+    init();
+  }, [id, t]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
