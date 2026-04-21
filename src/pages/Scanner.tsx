@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from '@/lib/i18n';
 import { useUi } from '@/components/ui-context';
 import { fetchContext, submitScan, downloadScanFile, getScanFiles, deleteScanFile, type Scanner, type PaperSize, type ScanFile } from '@/lib/scannerApi';
+import { downloadFile } from '@/lib/utils';
 import { Download, Loader2, Scan, RefreshCw, ChevronDown, ChevronUp, FolderOpen, X } from 'lucide-react';
 import { DocumentPreview, renderPdfToImages } from '@/components/DocumentPreview';
 
@@ -9,7 +10,6 @@ export default function ScannerPage() {
   const { t, locale } = useTranslation();
   const { toast, confirm } = useUi();
 
-  const [, setScannerMapping] = useState<Record<string, string> | null>(null);
   const [devices, setDevices] = useState<Scanner[]>([]);
   const [paperSizes, setPaperSizes] = useState<PaperSize[]>([]);
   const [loadingContext, setLoadingContext] = useState(true);
@@ -112,7 +112,6 @@ export default function ScannerPage() {
         const res = await fetch('/scannerMapping.json');
         if (res.ok) {
           mapping = await res.json();
-          setScannerMapping(mapping);
         }
       } catch (e) {
         console.warn('Could not load scannerMapping.json', e);
@@ -219,24 +218,14 @@ export default function ScannerPage() {
 
   const handleDownload = () => {
     if (!imageUrl) return;
-    const a = document.createElement('a');
-    a.href = imageUrl;
-    a.download = previewFilename || `scan-${new Date().getTime()}.jpg`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    downloadFile(imageUrl, previewFilename || `scan-${Date.now()}.jpg`);
   };
 
   const handleDownloadFile = async (filename: string) => {
     try {
       const blob = await downloadScanFile(filename);
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      downloadFile(url, filename);
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error(err);

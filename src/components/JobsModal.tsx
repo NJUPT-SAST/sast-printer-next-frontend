@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { useTranslation } from '@/lib/i18n';
 import { useUi } from '@/components/ui-context';
+import { apiErrMsg, parseGMTDate } from '@/lib/utils';
 import { FileText, RefreshCw, AlertCircle, Loader2, PrinterIcon, X } from 'lucide-react';
 
 interface PrintJob {
@@ -41,7 +42,7 @@ export default function JobsModal({ onClose }: JobsModalProps) {
   useEffect(() => {
     if (manualDuplexHook?.expiresAt) {
       const updateTimer = () => {
-        const remaining = Math.max(0, new Date(manualDuplexHook.expiresAt.replace(/-/g, '/') + ' GMT').getTime() - Date.now());
+        const remaining = Math.max(0, parseGMTDate(manualDuplexHook.expiresAt).getTime() - Date.now());
         setTimeLeft(remaining);
         if (remaining === 0) {
           setManualDuplexHook(null);
@@ -56,22 +57,13 @@ export default function JobsModal({ onClose }: JobsModalProps) {
     }
   }, [manualDuplexHook]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const apiErrMsg = (err: unknown, fallback: string) => {
-    const e = err as { response?: { data?: { error?: string } }; message?: string };
-    return e?.response?.data?.error ?? e?.message ?? fallback;
-  };
-
   const fetchJobs = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     setRefreshing(true);
     try {
       const response = await api.get('/jobs');
       const newData: PrintJob[] = response.data.jobs || [];
-      newData.sort((a, b) => {
-        const ta = new Date(a.submitted_at.replace(/-/g, '/') + ' GMT').getTime();
-        const tb = new Date(b.submitted_at.replace(/-/g, '/') + ' GMT').getTime();
-        return tb - ta;
-      });
+      newData.sort((a, b) => parseGMTDate(b.submitted_at).getTime() - parseGMTDate(a.submitted_at).getTime());
       setJobs(newData);
       setError(null);
     } catch (err: unknown) {
@@ -130,7 +122,7 @@ export default function JobsModal({ onClose }: JobsModalProps) {
   };
   const getStatusBadge = (status: string) => {
     const color = statusColors[status] ?? 'bg-gray-100 text-gray-600';
-    return <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${color}`}>{t(`status.${status}` as any)}</span>;
+    return <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${color}`}>{t(`status.${status}`)}</span>;
   };
 
   return (
@@ -224,7 +216,7 @@ export default function JobsModal({ onClose }: JobsModalProps) {
 
                 let jobTimeLeft = null;
                 if (isPendingDuplex && job.hook_expires_at) {
-                  jobTimeLeft = Math.max(0, new Date(job.hook_expires_at.replace(/-/g, '/') + ' GMT').getTime() - now);
+                  jobTimeLeft = Math.max(0, parseGMTDate(job.hook_expires_at).getTime() - now);
                 }
 
                 return (
@@ -245,7 +237,7 @@ export default function JobsModal({ onClose }: JobsModalProps) {
                           {job.submitted_at && (
                             <>
                               <span className="text-gray-300 hidden sm:inline">&bull;</span>
-                              <span>{new Date(job.submitted_at.replace(/-/g, '/') + ' GMT').toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US', {
+                              <span>{parseGMTDate(job.submitted_at).toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US', {
                                 year: 'numeric', month: '2-digit', day: '2-digit',
                                 hour: '2-digit', minute: '2-digit',
                                 timeZone: 'Asia/Shanghai'

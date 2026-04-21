@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom';
 import PrinterList from '@/components/PrinterList';
 import { DocumentPreview, renderPdfToImages } from '@/components/DocumentPreview';
 import JobsModal from '@/components/JobsModal';
+import { apiErrMsg, parseGMTDate, downloadFile } from '@/lib/utils';
 
 interface PrinterInfo {
   id: string;
@@ -201,7 +202,7 @@ function PrinterContent() {
   useEffect(() => {
     if (manualDuplexHook?.expiresAt) {
       const updateTimer = () => {
-        const remaining = Math.max(0, new Date(manualDuplexHook.expiresAt.replace(/-/g, '/') + ' GMT').getTime() - Date.now());
+        const remaining = Math.max(0, parseGMTDate(manualDuplexHook.expiresAt).getTime() - Date.now());
         setTimeLeft(remaining);
         if (remaining === 0) {
           setManualDuplexHook(null);
@@ -324,7 +325,7 @@ function PrinterContent() {
 
         const uniqueTypes = Array.from(new Set(types));
         setSupportedFileTypes(uniqueTypes.length > 0 ? uniqueTypes : ['pdf']);
-      } catch (err: unknown) {
+      } catch {
         setSupportedFileTypes(['pdf']);
       }
     };
@@ -336,17 +337,16 @@ function PrinterContent() {
         const saved = localStorage.getItem('duplex_preference');
         setDuplex(saved ?? '');
       } catch (err: unknown) {
-        let msg = t('error.fetchPrinters');
-        if (err instanceof Error) msg = err.message;
-        const anyErr = err as { response?: { data?: { error?: string } } };
-        if (anyErr.response?.data?.error) msg = anyErr.response.data.error;
-        setError(msg);
+        setError(apiErrMsg(err, t('error.fetchPrinters')));
       } finally {
         setLoading(false);
       }
     };
 
     const init = async () => {
+      setLoading(true);
+      setPrinter(null);
+      setError(null);
       if (id) {
         await fetchPrinter();
       } else {
@@ -493,11 +493,7 @@ function PrinterContent() {
       }
 
     } catch (err: unknown) {
-      let msg = t('error.submit');
-      if (err instanceof Error) msg = err.message;
-      const anyErr = err as { response?: { data?: { error?: string } } };
-      if (anyErr.response?.data?.error) msg = anyErr.response.data.error;
-      toast({ message: `${t('error.submit')}: ${msg}`, type: 'error' });
+      toast({ message: `${t('error.submit')}: ${apiErrMsg(err, t('error.submit'))}`, type: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -512,11 +508,7 @@ function PrinterContent() {
       setManualDuplexHook(null);
       setIsJobsModalOpen(true);
     } catch (err: unknown) {
-      let msg = t('error.submit');
-      if (err instanceof Error) msg = err.message;
-      const anyErr = err as { response?: { data?: { error?: string } } };
-      if (anyErr.response?.data?.error) msg = anyErr.response.data.error;
-      toast({ message: `${t('error.submit')}: ${msg}`, type: 'error' });
+      toast({ message: `${t('error.submit')}: ${apiErrMsg(err, t('error.submit'))}`, type: 'error' });
     } finally {
       setSubmittingDuplex(false);
     }
@@ -528,7 +520,7 @@ function PrinterContent() {
     try {
       await api.post(manualDuplexHook.url.replace('/continue', '/cancel'));
       toast({ message: t('printer.duplexCancelled'), type: 'success' });
-    } catch (err: unknown) {
+    } catch {
       // Ignored
     } finally {
       setManualDuplexHook(null);
@@ -539,13 +531,7 @@ function PrinterContent() {
 
   const handleDownloadPreview = () => {
     if (!previewPdfUrl) return;
-
-    const anchor = document.createElement('a');
-    anchor.href = previewPdfUrl;
-    anchor.download = file ? `${file.name.replace(/\.[^.]+$/, '')}.pdf` : 'preview.pdf';
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
+    downloadFile(previewPdfUrl, file ? `${file.name.replace(/\.[^.]+$/, '')}.pdf` : 'preview.pdf');
   };
 
   if (loading) {

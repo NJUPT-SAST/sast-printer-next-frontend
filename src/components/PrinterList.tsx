@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { useTranslation } from '@/lib/i18n';
+import { apiErrMsg } from '@/lib/utils';
 import { Printer as PrinterIcon, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -27,11 +28,7 @@ export default function PrinterList({ onJobsClick }: { onJobsClick?: () => void 
         const response = await api.get('/printers');
         setPrinters(response.data.printers || []);
       } catch (err: unknown) {
-        let msg = t('error.fetchPrinters');
-        if (err instanceof Error) msg = err.message;
-        const anyErr = err as { response?: { data?: { error?: string } } };
-        if (anyErr.response?.data?.error) msg = anyErr.response.data.error;
-        setError(msg);
+        setError(apiErrMsg(err, t('error.fetchPrinters')));
       } finally {
         setLoading(false);
       }
@@ -101,7 +98,6 @@ export default function PrinterList({ onJobsClick }: { onJobsClick?: () => void 
           className="inline-flex items-center text-sm font-medium text-gray-700 bg-white border border-gray-200 shadow-sm hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 px-4 py-2 rounded-lg transition-all"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>
-          {/* @ts-ignore */}
           {t('nav.history') || "任务队列"}
         </button>
       </div>
@@ -132,7 +128,7 @@ export default function PrinterList({ onJobsClick }: { onJobsClick?: () => void 
                     </div>
                   </div>
                   <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wide whitespace-nowrap ${getStatusColor(printer.status)}`}>
-                    {t(`status.${printer.status}` as keyof typeof import('@/lib/i18n').translations['zh'])}
+                    {t(`status.${printer.status}`)}
                   </span>
                 </div>
                 

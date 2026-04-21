@@ -1,42 +1,9 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from '@/lib/i18n';
 
-import { useEffect, useState } from 'react';
-
 export default function Header() {
   const { t } = useTranslation();
   const pathname = useLocation().pathname;
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [hasClickedScanner, setHasClickedScanner] = useState(() => {
-    return localStorage.getItem('has_clicked_scanner') === 'true';
-  });
-
-  const handleScannerClick = () => {
-    if (!hasClickedScanner) {
-      setHasClickedScanner(true);
-      localStorage.setItem('has_clicked_scanner', 'true');
-    }
-  };
-
-  useEffect(() => {
-    const checkAuth = () => {
-      const token = localStorage.getItem('token');
-      setIsLoggedIn(!!token);
-    };
-    
-    checkAuth();
-    
-    // 监听 storage 改变以便登出/跨标签页同步
-    window.addEventListener('storage', checkAuth);
-    
-    // 创建一个自定义事件，供 AuthGuard 登录完成后触发（在同页面的 localStorage.setItem 不会触发 'storage' event）
-    window.addEventListener('auth-changed', checkAuth);
-
-    return () => {
-      window.removeEventListener('storage', checkAuth);
-      window.removeEventListener('auth-changed', checkAuth);
-    };
-  }, []);
 
   if (pathname === '/') return null;
 
@@ -57,7 +24,6 @@ export default function Header() {
             className="flex items-center text-sm font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg transition-colors"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1.5"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-            {/* @ts-ignore */}
             {t('home.userManual') || "使用说明文档"}
           </a>
         </nav>
