@@ -251,7 +251,7 @@ export default function ScannerPage() {
   };
 
   return (
-    <div className={`max-w-6xl mx-auto p-4 sm:p-6 w-full flex-1 flex flex-col relative ${imageUrl ? 'h-[calc(100vh-4rem)]' : ''}`}>
+    <div className={`max-w-6xl mx-auto p-4 sm:p-6 pb-24 lg:pb-6 w-full flex-1 flex flex-col relative ${imageUrl ? 'h-[calc(100vh-4rem)]' : ''}`}>
       <div className="flex justify-between items-center mb-6 shrink-0">
         <h1 className="text-2xl font-bold text-gray-900">{t('scanner.title')}</h1>
         <button
@@ -548,8 +548,8 @@ export default function ScannerPage() {
                 </div>
               )}
 
-              {/* Action Area: Format + Scan Button */}
-              <div className="mt-auto pt-4 border-t border-gray-200 flex items-center gap-3">
+              {/* Action Area: Format + Scan Button — desktop only inside sidebar */}
+              <div className="hidden lg:flex mt-auto pt-4 border-t border-gray-200 items-center gap-3">
                 <select
                   className="p-3 w-[120px] sm:w-[140px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white font-medium text-sm text-gray-700"
                   value={pipeline}
@@ -697,6 +697,33 @@ export default function ScannerPage() {
               )}
             </div>
           </div>
+        </div>
+      )}
+      {/* Mobile floating scan button */}
+      {!loadingContext && !errorContext && devices.length > 0 && (
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 p-4 bg-white border-t border-gray-200 shadow-lg flex items-center gap-3">
+          <select
+            className="p-3 w-[120px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white font-medium text-sm text-gray-700"
+            value={pipeline}
+            onChange={(e) => {
+              const newFormat = e.target.value;
+              setPipeline(newFormat);
+              localStorage.setItem('scanner_last_pipeline', newFormat);
+            }}
+            disabled={scanning}
+          >
+            {((selectedScanner as any)?.pipelines || ['Scan as PNG', 'Scan as PDF']).map((p: string) => (
+              <option key={p} value={p}>{p.replace('Scan as ', '')}</option>
+            ))}
+          </select>
+          <button
+            onClick={handleScan}
+            disabled={scanning || !selectedScannerId}
+            className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl font-medium transition-colors"
+          >
+            {scanning ? <Loader2 className="w-5 h-5 animate-spin" /> : <Scan className="w-5 h-5" />}
+            {t('scanner.scanBtn')}
+          </button>
         </div>
       )}
     </div>

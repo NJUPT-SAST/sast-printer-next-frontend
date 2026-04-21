@@ -8,7 +8,9 @@ import { Link } from 'react-router-dom';
 import PrinterList from '@/components/PrinterList';
 import { DocumentPreview, renderPdfToImages } from '@/components/DocumentPreview';
 import JobsModal from '@/components/JobsModal';
-import { apiErrMsg, parseGMTDate, downloadFile } from '@/lib/utils';
+import ImageFileList from '@/components/ImageFileList';
+import { apiErrMsg, parseGMTDate, downloadFile, imagesToPdf } from '@/lib/utils';
+import { MAX_IMAGES } from '@/lib/constants';
 
 interface PrinterInfo {
   id: string;
@@ -55,6 +57,8 @@ function PrinterContent() {
 
   const [submitting, setSubmitting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [merging, setMerging] = useState(false);
   const [isJobsModalOpen, setIsJobsModalOpen] = useState(false);
   const [manualDuplexHook, setManualDuplexHook] = useState<{ url: string, expiresAt: string } | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
@@ -75,6 +79,9 @@ function PrinterContent() {
     const ext = getFileExtension(targetFile.name);
     return supportedFileTypes.includes(ext);
   };
+
+  const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']);
+  const isImageFile = (f: File) => IMAGE_EXTS.has(getFileExtension(f.name));
 
   const rejectUnsupportedFile = () => {
     toast({
@@ -299,6 +306,28 @@ function PrinterContent() {
   }, [previewPdfUrl]);
 
   useEffect(() => {
+    if (imageFiles.length === 0) return;
+    let cancelled = false;
+    const merge = async () => {
+      setMerging(true);
+      try {
+        const blob = await imagesToPdf(imageFiles);
+        if (!cancelled) {
+          setFile(new File([blob], 'images.pdf', { type: 'application/pdf' }));
+        }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          toast({ message: apiErrMsg(err, t('error.submit')), type: 'error' });
+        }
+      } finally {
+        if (!cancelled) setMerging(false);
+      }
+    };
+    merge();
+    return () => { cancelled = true; };
+  }, [imageFiles, toast, t]);
+
+  useEffect(() => {
     const { error: rangeError } = validatePageRange(pages, previewPageCount);
     setPagesError(rangeError);
   }, [pages, previewPageCount]);
@@ -358,16 +387,45 @@ function PrinterContent() {
     init();
   }, [id, t]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const selectedFile = e.target.files[0];
-      if (!isSupportedFile(selectedFile)) {
-        rejectUnsupportedFile();
-        if (fileInputRef.current) fileInputRef.current.value = '';
-        return;
+  const handleAddImages = (incoming: File[]) => {
+    setImageFiles((prev) => {
+      const available = MAX_IMAGES - prev.length;
+      if (available <= 0) {
+        toast({ message: t('printer.imageLimitReached'), type: 'error' });
+        return prev;
       }
-      setFile(selectedFile);
+      const toAdd = incoming.slice(0, available);
+      if (incoming.length > available) {
+        toast({ message: t('printer.imageLimitReached'), type: 'error' });
+      }
+      return [...prev, ...toAdd];
+    });
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    if (isImageFile(files[0])) {
+      const valid = files.filter(isImageFile);
+      handleAddImages(valid);
+    } else {
+      if (!isSupportedFile(files[0])) { rejectUnsupportedFile(); return; }
+      setImageFiles([]);
+      setFile(files[0]);
     }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleReplaceImage = (index: number, newFile: File) => {
+    setImageFiles((prev) => prev.map((f, i) => (i === index ? newFile : f)));
+  };
+
+  const handleDeleteImage = (index: number) => {
+    setImageFiles((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      if (next.length === 0) setFile(null);
+      return next;
+    });
   };
 
   const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
@@ -398,10 +456,15 @@ function PrinterContent() {
     e.stopPropagation();
     dragCounter.current = 0;
     setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const droppedFile = e.dataTransfer.files[0];
-      if (isSupportedFile(droppedFile)) {
-        setFile(droppedFile);
+    if (!e.dataTransfer.files?.length) return;
+    const first = e.dataTransfer.files[0];
+    if (isImageFile(first)) {
+      const images = Array.from(e.dataTransfer.files).filter(isImageFile);
+      handleAddImages(images);
+    } else {
+      if (isSupportedFile(first)) {
+        setImageFiles([]);
+        setFile(first);
       } else {
         rejectUnsupportedFile();
       }
@@ -567,8 +630,23 @@ function PrinterContent() {
     );
   }
 
+  const submitBtnClass = `w-full flex justify-center items-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-base font-medium text-white transition-all ${
+    !file || submitting || duplex === '' || merging
+      ? 'bg-blue-300 cursor-not-allowed'
+      : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 hover:shadow'
+  }`;
+
+  const submitBtnContent = submitting ? (
+    <><Loader2 className="w-5 h-5 mr-2 animate-spin" />{t('printer.submitting')}</>
+  ) : (
+    <><PrinterIcon className="w-5 h-5 mr-2" />{t('printer.submit')}</>
+  );
+
+  const submitBtnDisabled = !file || submitting || duplex === '' || merging;
+
   return (
-    <div className="max-w-6xl mx-auto p-4 sm:p-6 w-full pb-20">
+    <div className="min-h-[calc(100vh-5rem)] flex flex-col">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 w-full pt-4 sm:pt-6 pb-24 lg:pb-4 flex flex-col">
       {manualDuplexHook && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl border border-gray-100 flex flex-col items-center">
@@ -605,7 +683,7 @@ function PrinterContent() {
         </div>
       )}
       {isJobsModalOpen && <JobsModal onClose={() => setIsJobsModalOpen(false)} />}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-4 shrink-0">
         <Link to="/printers" className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">
           <ChevronLeft className="w-4 h-4 mr-1" />
           {t('printer.back')}
@@ -619,7 +697,7 @@ function PrinterContent() {
         </button>
       </div>
 
-      <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm mb-6">
+      <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm mb-4 shrink-0">
         <div className="flex items-start space-x-4">
           <div className="p-3 bg-blue-50 rounded-xl">
             <PrinterIcon className="w-8 h-8 text-blue-600" />
@@ -632,50 +710,67 @@ function PrinterContent() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col lg:flex-row gap-6 items-stretch">
-        <div className="flex-1 flex flex-col space-y-6">
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex-1">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('printer.document')}</h2>
+      <form id="print-form" onSubmit={handleSubmit} className="flex flex-col lg:flex-row gap-6 items-start">
+        <div className="w-full lg:w-1/2 flex flex-col">
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 shrink-0">{t('printer.document')}</h2>
 
-            <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.selectFile')} <span className="text-red-500">*</span></label>
-            <div
-              className={`group border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer
-                ${isDragging ? 'border-blue-500 bg-blue-50' : file ? 'border-green-300 bg-green-50 hover:border-blue-400 hover:bg-blue-50' : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50 bg-gray-50'}`}
-              onClick={() => fileInputRef.current?.click()} onDragEnter={handleDragEnter} onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-            >
-              <input
-                type="file"
-                accept={acceptValue}
-                className="hidden"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-              />
-              {file ? (
-                <div className="flex flex-col items-center pointer-events-none">
-                  <FileText className={`w-10 h-10 mb-3 transition-colors ${isDragging ? 'text-blue-500' : 'text-green-600 group-hover:text-blue-500'}`} />
-                  <span className={`font-medium transition-colors ${isDragging ? 'text-blue-700' : 'text-green-800 group-hover:text-blue-700'}`}>{file.name}</span>
-                  <span className={`text-xs mt-1 transition-colors ${isDragging ? 'text-blue-600' : 'text-green-600 group-hover:text-blue-600'}`}>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
-                  <button type="button" className={`mt-3 text-xs underline pointer-events-auto transition-colors ${isDragging ? 'text-blue-600' : 'text-green-600 group-hover:text-blue-600'}`} onClick={(e) => {
-                    e.stopPropagation();
-                    setFile(null);
-                    setPreviewVersion(0);
-                    if (fileInputRef.current) fileInputRef.current.value = '';
-                  }}>{t('printer.changeFile')}</button>
-                </div>
+            <div className="flex flex-col flex-1 min-h-0">
+              <label className="block text-sm font-medium text-gray-700 mb-2 shrink-0">
+                {t('printer.selectFile')} <span className="text-red-500">*</span>
+              </label>
+
+              {imageFiles.length > 0 ? (
+                <ImageFileList
+                  files={imageFiles}
+                  onReorder={setImageFiles}
+                  onReplace={handleReplaceImage}
+                  onDelete={handleDeleteImage}
+                  onAdd={handleAddImages}
+                  limitReached={imageFiles.length >= MAX_IMAGES}
+                />
               ) : (
-                <div className="flex flex-col items-center pointer-events-none">
-                  <UploadCloud className={`w-10 h-10 mb-3 transition-colors ${isDragging ? 'text-blue-500' : 'text-gray-400 group-hover:text-blue-500'}`} />
-                  <span className={`font-medium transition-colors ${isDragging ? 'text-blue-600' : 'text-gray-600 group-hover:text-blue-600'}`}>{t('printer.tapToSelectWithTypes')}</span>
-                  <span className="text-xs text-gray-400 mt-1">{supportedTypesText}</span>
+                <div
+                  className={`group border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer
+                    ${isDragging ? 'border-blue-500 bg-blue-50' : file ? 'border-green-300 bg-green-50 hover:border-blue-400 hover:bg-blue-50' : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50 bg-gray-50'}`}
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragEnter={handleDragEnter}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
+                  <input
+                    type="file"
+                    accept={acceptValue}
+                    multiple
+                    className="hidden"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                  />
+                  {file ? (
+                    <div className="flex flex-col items-center pointer-events-none">
+                      <FileText className={`w-10 h-10 mb-3 transition-colors ${isDragging ? 'text-blue-500' : 'text-green-600 group-hover:text-blue-500'}`} />
+                      <span className={`font-medium transition-colors ${isDragging ? 'text-blue-700' : 'text-green-800 group-hover:text-blue-700'}`}>{file.name}</span>
+                      <span className={`text-xs mt-1 transition-colors ${isDragging ? 'text-blue-600' : 'text-green-600 group-hover:text-blue-600'}`}>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                      <button type="button" className={`mt-3 text-xs underline pointer-events-auto transition-colors ${isDragging ? 'text-blue-600' : 'text-green-600 group-hover:text-blue-600'}`} onClick={(e) => {
+                        e.stopPropagation();
+                        setFile(null);
+                        setPreviewVersion(0);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      }}>{t('printer.changeFile')}</button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center pointer-events-none">
+                      <UploadCloud className={`w-10 h-10 mb-3 transition-colors ${isDragging ? 'text-blue-500' : 'text-gray-400 group-hover:text-blue-500'}`} />
+                      <span className={`font-medium transition-colors ${isDragging ? 'text-blue-600' : 'text-gray-600 group-hover:text-blue-600'}`}>{t('printer.tapToSelectWithTypes')}</span>
+                      <span className="text-xs text-gray-400 mt-1">{supportedTypesText}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 mt-6 shrink-0">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.copies')}</label>
               <input
@@ -776,11 +871,11 @@ function PrinterContent() {
         </div>
 
         {/* Right Column */}
-        <div className="w-full lg:w-[400px] xl:w-[500px] flex flex-col space-y-6">
+        <div className="w-full lg:w-1/2 flex flex-col gap-6">
           {file && (
-            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex-1 flex flex-col min-h-0">
-              <div className="flex items-center justify-between mb-2 shrink-0">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('printer.preview')}</h2>
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col" style={{ height: 'calc(100vh - 29rem)' }}>
+              <div className="flex items-center justify-between mb-4 shrink-0">
+                <h2 className="text-lg font-semibold text-gray-900">{merging ? t('printer.merging') : t('printer.preview')}</h2>
                 {previewError && (
                   <button
                     type="button"
@@ -807,36 +902,36 @@ function PrinterContent() {
 
               <DocumentPreview
                 images={previewImages}
-                loading={previewLoading}
+                loading={previewLoading || merging}
                 error={previewError}
               />
             </div>
           )}
 
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+          <div className="hidden lg:block bg-white p-6 rounded-2xl border border-gray-200 shadow-sm shrink-0">
             <button
               type="submit"
-              disabled={!file || submitting || duplex === ''}
-              className={`w-full flex justify-center items-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-base font-medium text-white transition-all
-                ${!file || submitting || duplex === ''
-                  ? 'bg-blue-300 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 hover:shadow'}`}
+              disabled={submitBtnDisabled}
+              className={submitBtnClass}
             >
-              {submitting ? (
-                <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  {t('printer.submitting')}
-                </>
-              ) : (
-                <>
-                  <PrinterIcon className="w-5 h-5 mr-2" />
-                  {t('printer.submit')}
-                </>
-              )}
+              {submitBtnContent}
             </button>
           </div>
         </div>
       </form>
+
+      {/* Mobile floating submit button */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 p-4 bg-white border-t border-gray-200 shadow-lg">
+        <button
+          form="print-form"
+          type="submit"
+          disabled={submitBtnDisabled}
+          className={submitBtnClass}
+        >
+          {submitBtnContent}
+        </button>
+      </div>
+    </div>
     </div>
   );
 }

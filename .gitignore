@@ -19,6 +19,9 @@ openapi.yaml
 /dist
 mock-server.js
 
+# worktrees
+.worktrees/
+
 # misc
 .DS_Store
 *.pem

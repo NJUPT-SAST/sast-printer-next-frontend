@@ -53,22 +53,18 @@ export function DocumentPreview({
   const { t } = useTranslation();
 
   return (
-    <div className="flex-1 w-full h-full min-h-[300px] lg:min-h-0 rounded-xl border border-gray-200 bg-gray-50 overflow-hidden flex flex-col">
-      {loading && (
-        <div className="w-full h-full flex items-center justify-center text-gray-600 text-sm">
+    <div className="w-full rounded-xl border border-gray-200 bg-gray-50 overflow-hidden flex flex-col flex-1 min-h-0">
+      {loading ? (
+        <div className="flex-1 flex items-center justify-center text-gray-600 text-sm">
           <Loader2 className="w-5 h-5 mr-2 animate-spin" />
           {loadingText || t('printer.previewGenerating')}
         </div>
-      )}
-
-      {!loading && error && (
-        <div className="w-full h-full flex items-center justify-center px-6 text-center text-red-600 text-sm">
+      ) : error ? (
+        <div className="flex-1 flex items-center justify-center px-6 text-center text-red-600 text-sm">
           {error}
         </div>
-      )}
-
-      {!loading && !error && images.length > 0 && (
-        <div className="h-full overflow-y-auto p-4 space-y-4 bg-gray-100 flex-1">
+      ) : images.length > 0 ? (
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-gray-100">
           {images.map((image, index) => (
             <div
               key={`preview-page-${index + 1}`}
@@ -85,9 +81,7 @@ export function DocumentPreview({
             </div>
           ))}
         </div>
-      )}
-
-      {!loading && !error && images.length === 0 && fallbackNode}
+      ) : fallbackNode ?? null}
     </div>
   );
 }
