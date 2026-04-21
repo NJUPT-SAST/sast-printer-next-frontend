@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import api from '@/lib/api';
 import { useTranslation } from '@/lib/i18n';
 import { Printer as PrinterIcon, AlertCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 interface Printer {
   id: string;
@@ -15,7 +15,7 @@ interface Printer {
   note?: string;
 }
 
-export default function PrinterList() {
+export default function PrinterList({ onJobsClick }: { onJobsClick?: () => void }) {
   const { t } = useTranslation();
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,14 +96,14 @@ export default function PrinterList() {
     <div className="max-w-6xl mx-auto p-4 sm:p-6 w-full">
       <div className="mb-6 flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-gray-900">{t('home.title') || "可用打印机"}</h1>
-        <Link 
-          to="/jobs" 
+        <button
+          onClick={onJobsClick}
           className="inline-flex items-center text-sm font-medium text-gray-700 bg-white border border-gray-200 shadow-sm hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 px-4 py-2 rounded-lg transition-all"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>
           {/* @ts-ignore */}
           {t('nav.history') || "任务队列"}
-        </Link>
+        </button>
       </div>
 
       {printers.length === 0 ? (

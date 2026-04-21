@@ -3,10 +3,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '@/lib/api';
 import { useTranslation } from '@/lib/i18n';
 import { useUi } from '@/components/ui-context';
-import { ChevronLeft, PrinterIcon, UploadCloud, FileText, Loader2, RefreshCw, Download } from 'lucide-react';
+import { ChevronLeft, PrinterIcon, UploadCloud, FileText, Loader2, RefreshCw, Download, ClipboardList } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PrinterList from '@/components/PrinterList';
 import { DocumentPreview, renderPdfToImages } from '@/components/DocumentPreview';
+import JobsModal from '@/components/JobsModal';
 
 interface PrinterInfo {
   id: string;
@@ -45,7 +46,7 @@ function PrinterContent() {
   const [previewPageCount, setPreviewPageCount] = useState<number | null>(null);
   const [previewVersion, setPreviewVersion] = useState(0);
   const [copies, setCopies] = useState(1);
-  const [duplex, setDuplex] = useState('off');
+  const [duplex, setDuplex] = useState('');
   const [collate, setCollate] = useState('true');
   const [pageSet, setPageSet] = useState('all');
   const [pages, setPages] = useState('');
@@ -53,6 +54,7 @@ function PrinterContent() {
 
   const [submitting, setSubmitting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isJobsModalOpen, setIsJobsModalOpen] = useState(false);
   const [manualDuplexHook, setManualDuplexHook] = useState<{ url: string, expiresAt: string } | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [submittingDuplex, setSubmittingDuplex] = useState(false);
@@ -193,13 +195,17 @@ function PrinterContent() {
   };
 
   useEffect(() => {
+    setIsJobsModalOpen(false);
+  }, [id]);
+
+  useEffect(() => {
     if (manualDuplexHook?.expiresAt) {
       const updateTimer = () => {
         const remaining = Math.max(0, new Date(manualDuplexHook.expiresAt.replace(/-/g, '/') + ' GMT').getTime() - Date.now());
         setTimeLeft(remaining);
         if (remaining === 0) {
           setManualDuplexHook(null);
-          router('/jobs');
+          setIsJobsModalOpen(true);
         }
       };
       updateTimer();
@@ -303,6 +309,12 @@ function PrinterContent() {
   }, [duplex, isDuplexDisabled]);
 
   useEffect(() => {
+    if (duplex !== '' && !isDuplexDisabled) {
+      localStorage.setItem('duplex_preference', duplex);
+    }
+  }, [duplex, isDuplexDisabled]);
+
+  useEffect(() => {
     const fetchSupportedFileTypes = async () => {
       try {
         const response = await api.get<SupportedFileTypesResponse>('/jobs/supported-file-types');
@@ -321,9 +333,8 @@ function PrinterContent() {
       try {
         const response = await api.get(`/printers/${id}`);
         setPrinter(response.data);
-        if (response.data.duplex_mode !== 'off') {
-          setDuplex(response.data.duplex_mode === 'auto' ? 'true' : 'manual');
-        }
+        const saved = localStorage.getItem('duplex_preference');
+        setDuplex(saved ?? '');
       } catch (err: unknown) {
         let msg = t('error.fetchPrinters');
         if (err instanceof Error) msg = err.message;
@@ -478,7 +489,7 @@ function PrinterContent() {
         toast({ message: t('printer.manualDuplexWait'), type: 'success' });
       } else {
         toast({ message: t('printer.success'), type: 'success' });
-        router('/jobs');
+        setIsJobsModalOpen(true);
       }
 
     } catch (err: unknown) {
@@ -499,7 +510,7 @@ function PrinterContent() {
       await api.post(manualDuplexHook.url);
       toast({ message: t('printer.success'), type: 'success' });
       setManualDuplexHook(null);
-      router('/jobs');
+      setIsJobsModalOpen(true);
     } catch (err: unknown) {
       let msg = t('error.submit');
       if (err instanceof Error) msg = err.message;
@@ -522,7 +533,7 @@ function PrinterContent() {
     } finally {
       setManualDuplexHook(null);
       setSubmittingDuplex(false);
-      router('/jobs');
+      setIsJobsModalOpen(true);
     }
   };
 
@@ -562,7 +573,12 @@ function PrinterContent() {
   }
 
   if (!id) {
-    return <PrinterList />;
+    return (
+      <>
+        {isJobsModalOpen && <JobsModal onClose={() => setIsJobsModalOpen(false)} />}
+        <PrinterList onJobsClick={() => setIsJobsModalOpen(true)} />
+      </>
+    );
   }
 
   return (
@@ -602,10 +618,20 @@ function PrinterContent() {
           </div>
         </div>
       )}
-      <Link to="/printers" className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-900 mb-6 transition-colors">
-        <ChevronLeft className="w-4 h-4 mr-1" />
-        {t('printer.back')}
-      </Link>
+      {isJobsModalOpen && <JobsModal onClose={() => setIsJobsModalOpen(false)} />}
+      <div className="flex justify-between items-center mb-6">
+        <Link to="/printers" className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">
+          <ChevronLeft className="w-4 h-4 mr-1" />
+          {t('printer.back')}
+        </Link>
+        <button
+          onClick={() => setIsJobsModalOpen(true)}
+          className="inline-flex items-center text-sm font-medium text-gray-700 bg-white border border-gray-200 shadow-sm hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 px-4 py-2 rounded-lg transition-all"
+        >
+          <ClipboardList className="w-4 h-4 mr-2" />
+          {t('nav.history')}
+        </button>
+      </div>
 
       <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm mb-6">
         <div className="flex items-start space-x-4">
@@ -804,9 +830,9 @@ function PrinterContent() {
           <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
             <button
               type="submit"
-              disabled={!file || submitting}
+              disabled={!file || submitting || duplex === ''}
               className={`w-full flex justify-center items-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-base font-medium text-white transition-all
-                ${!file || submitting
+                ${!file || submitting || duplex === ''
                   ? 'bg-blue-300 cursor-not-allowed'
                   : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 hover:shadow'}`}
             >
