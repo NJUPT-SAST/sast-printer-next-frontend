@@ -44,7 +44,7 @@ function PrinterContent() {
   const [supportedFileTypes, setSupportedFileTypes] = useState<string[]>(['pdf']);
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [previewImages, setPreviewImages] = useState<string[]>([]);
-  const [pageDimensions, setPageDimensions] = useState<{pageWidth: number; pageHeight: number}[]>([]);
+  const [pageDimensions, setPageDimensions] = useState<{ pageWidth: number; pageHeight: number }[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewPageCount, setPreviewPageCount] = useState<number | null>(null);
@@ -57,6 +57,10 @@ function PrinterContent() {
   const [pagesError, setPagesError] = useState('');
   const [nup, setNup] = useState<1 | 2 | 4 | 6>(1);
   const [nupDirection, setNupDirection] = useState<'horizontal' | 'vertical'>('horizontal');
+
+  const [sourceTab, setSourceTab] = useState<'file' | 'feishu'>('file');
+  const [feishuUrl, setFeishuUrl] = useState('');
+  const [feishuUrlError, setFeishuUrlError] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -255,8 +259,10 @@ function PrinterContent() {
     }
   }, [manualDuplexHook]);
 
+  const hasDocument = sourceTab === 'file' ? !!file : !!feishuUrl.trim();
+
   useEffect(() => {
-    if (!file) {
+    if (!hasDocument) {
       setPreviewLoading(false);
       setPreviewError(null);
       setPreviewPageCount(null);
@@ -276,19 +282,28 @@ function PrinterContent() {
       setPreviewError(null);
 
       try {
-        const formData = new FormData();
-        formData.append('file', file);
-        if (id) {
-          formData.append('printer_id', id);
-        }
+        let response;
 
-        const response = await api.post('/jobs/preview', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-          responseType: 'blob',
-          signal: controller.signal,
-        });
+        if (sourceTab === 'file' && file) {
+          const formData = new FormData();
+          formData.append('file', file);
+          if (id) {
+            formData.append('printer_id', id);
+          }
+
+          response = await api.post('/jobs/preview', formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
+            responseType: 'blob',
+            signal: controller.signal,
+          });
+        } else {
+          response = await api.post('/jobs/preview/feishu', { url: feishuUrl.trim() }, {
+            responseType: 'blob',
+            signal: controller.signal,
+          });
+        }
 
         const blob = response.data as Blob;
         const objectUrl = URL.createObjectURL(blob);
@@ -329,7 +344,7 @@ function PrinterContent() {
     return () => {
       controller.abort();
     };
-  }, [file, id, previewVersion, t]);
+  }, [hasDocument, sourceTab, file, feishuUrl, id, previewVersion, t]);
 
   useEffect(() => {
     return () => {
@@ -491,6 +506,27 @@ function PrinterContent() {
     e.stopPropagation();
   };
 
+  const handleFeishuUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setFeishuUrl(value);
+    if (value.trim() && !/^https:\/\/.+\.feishu\.cn\/(docx|doc|sheets|bitable|mindnotes|wiki)\/.+/i.test(value.trim())) {
+      setFeishuUrlError(t('printer.feishuUrlInvalid'));
+    } else {
+      setFeishuUrlError('');
+    }
+  };
+
+  const handleTabSwitch = (tab: 'file' | 'feishu') => {
+    setSourceTab(tab);
+    if (tab === 'feishu') {
+      setFile(null);
+      setImageFiles([]);
+    } else {
+      setFeishuUrl('');
+      setFeishuUrlError('');
+    }
+  };
+
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
@@ -522,45 +558,25 @@ function PrinterContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) {
+    if (!hasDocument) {
       toast({ message: t('printer.tapToSelect'), type: 'error' });
+      return;
+    }
+
+    if (sourceTab === 'feishu' && !feishuUrl.trim()) {
+      toast({ message: t('printer.feishuUrlInvalid'), type: 'error' });
       return;
     }
 
     setSubmitting(true);
     try {
-      let fileToSubmit = file;
-      const selectedForNup = nup > 1 ? getSelectedPages() : null;
-      if (nup > 1) {
-        try {
-          fileToSubmit = new File(
-            [await createNupPdf(file, nup, nupDirection, selectedForNup ?? undefined, pageDimensions[0])],
-            file.name.replace(/\.[^.]+$/, '') + '_nup.pdf',
-            { type: 'application/pdf' },
-          );
-        } catch {
-          toast({ message: t('printer.nupTransforming') + ' ' + t('error.submit'), type: 'error' });
-          setSubmitting(false);
-          return;
-        }
-      }
-      const formData = new FormData();
-      formData.append('printer_id', id || '');
-      formData.append('file', fileToSubmit);
-
       const { valid, error: validationError } = validatePageRange(pages, previewPageCount, true);
       if (!valid) {
         setPagesError(validationError);
         toast({ message: validationError || t('printer.pageRangeInvalid'), type: 'error' });
+        setSubmitting(false);
         return;
       }
-
-      const queryParams = new URLSearchParams();
-      queryParams.append('copies', copies.toString());
-      if (duplex !== 'off') {
-        queryParams.append('duplex', duplex);
-      }
-      queryParams.append('collate', collate);
 
       let finalPages = pages.trim();
       if (pageSet !== 'all') {
@@ -598,25 +614,79 @@ function PrinterContent() {
         }
       }
 
-      if (finalPages && nup === 1) {
-        queryParams.append('pages', finalPages);
-      }
+      if (sourceTab === 'file' && file) {
+        let fileToSubmit = file;
+        const selectedForNup = nup > 1 ? getSelectedPages() : null;
+        if (nup > 1) {
+          try {
+            fileToSubmit = new File(
+              [await createNupPdf(file, nup, nupDirection, selectedForNup ?? undefined, pageDimensions[0])],
+              file.name.replace(/\.[^.]+$/, '') + '_nup.pdf',
+              { type: 'application/pdf' },
+            );
+          } catch {
+            toast({ message: t('printer.nupTransforming') + ' ' + t('error.submit'), type: 'error' });
+            setSubmitting(false);
+            return;
+          }
+        }
 
-      const response = await api.post(`/jobs?${queryParams.toString()}`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+        const formData = new FormData();
+        formData.append('printer_id', id || '');
+        formData.append('file', fileToSubmit);
 
-      if (response.data.hook_url) {
-        setManualDuplexHook({
-          url: response.data.hook_url,
-          expiresAt: response.data.hook_expires_at,
+        const queryParams = new URLSearchParams();
+        queryParams.append('copies', copies.toString());
+        if (duplex !== 'off') {
+          queryParams.append('duplex', duplex);
+        }
+        queryParams.append('collate', collate);
+        if (finalPages && nup === 1) {
+          queryParams.append('pages', finalPages);
+        }
+
+        const response = await api.post(`/jobs?${queryParams.toString()}`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
         });
-        toast({ message: t('printer.manualDuplexWait'), type: 'success' });
+
+        if (response.data.hook_url) {
+          setManualDuplexHook({
+            url: response.data.hook_url,
+            expiresAt: response.data.hook_expires_at,
+          });
+          toast({ message: t('printer.manualDuplexWait'), type: 'success' });
+        } else {
+          toast({ message: t('printer.success'), type: 'success' });
+          setIsJobsModalOpen(true);
+        }
       } else {
-        toast({ message: t('printer.success'), type: 'success' });
-        setIsJobsModalOpen(true);
+        const body: Record<string, unknown> = {
+          url: feishuUrl.trim(),
+          printer_id: id || '',
+          copies,
+          collate: collate === 'true',
+        };
+        if (duplex !== 'off') {
+          body.duplex = duplex === 'true';
+        }
+        if (finalPages) {
+          body.pages = finalPages;
+        }
+
+        const response = await api.post('/jobs/feishu', body);
+
+        if (response.data.hook_url) {
+          setManualDuplexHook({
+            url: response.data.hook_url,
+            expiresAt: response.data.hook_expires_at,
+          });
+          toast({ message: t('printer.manualDuplexWait'), type: 'success' });
+        } else {
+          toast({ message: t('printer.success'), type: 'success' });
+          setIsJobsModalOpen(true);
+        }
       }
 
     } catch (err: unknown) {
@@ -658,7 +728,10 @@ function PrinterContent() {
 
   const handleDownloadPreview = () => {
     if (!previewPdfUrl) return;
-    downloadFile(previewPdfUrl, file ? `${file.name.replace(/\.[^.]+$/, '')}.pdf` : 'preview.pdf');
+    const filename = file
+      ? `${file.name.replace(/\.[^.]+$/, '')}.pdf`
+      : 'feishu-document.pdf';
+    downloadFile(previewPdfUrl, filename);
   };
 
   if (loading) {
@@ -694,11 +767,12 @@ function PrinterContent() {
     );
   }
 
-  const submitBtnClass = `w-full flex justify-center items-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-base font-medium text-white transition-all ${
-    !file || submitting || duplex === '' || merging
+  const submitBtnDisabled = !hasDocument || submitting || duplex === '' || merging;
+
+  const submitBtnClass = `w-full flex justify-center items-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-base font-medium text-white transition-all ${submitBtnDisabled
       ? 'bg-blue-300 cursor-not-allowed'
       : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 hover:shadow'
-  }`;
+    }`;
 
   const submitBtnContent = submitting ? (
     <><Loader2 className="w-5 h-5 mr-2 animate-spin" />{t('printer.submitting')}</>
@@ -706,382 +780,431 @@ function PrinterContent() {
     <><PrinterIcon className="w-5 h-5 mr-2" />{t('printer.submit')}</>
   );
 
-  const submitBtnDisabled = !file || submitting || duplex === '' || merging;
-
   return (
     <div className="min-h-[calc(100vh-5rem)] flex flex-col">
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 w-full pt-4 sm:pt-6 pb-24 lg:pb-4 flex flex-col">
-      {manualDuplexHook && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl border border-gray-100 flex flex-col items-center">
-            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-              <PrinterIcon className="w-6 h-6 text-blue-600" />
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">{t('printer.manualDuplexTitle')}</h3>
-            <p className="text-gray-600 text-center mb-4">
-              {t('printer.manualDuplexDesc')}
-            </p>
-            {timeLeft !== null && (
-              <div className="text-sm font-medium text-orange-600 mb-6 bg-orange-50 px-3 py-1 rounded-full text-center flex items-center justify-center space-x-2">
-                <span>{t('printer.timeLeft')}</span>
-                <span>{Math.max(0, Math.floor(timeLeft / 1000 / 60))}:{Math.max(0, Math.floor(timeLeft / 1000 % 60)).toString().padStart(2, '0')}</span>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 w-full pt-4 sm:pt-6 pb-24 lg:pb-4 flex flex-col">
+        {manualDuplexHook && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl border border-gray-100 flex flex-col items-center">
+              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                <PrinterIcon className="w-6 h-6 text-blue-600" />
               </div>
-            )}
-            <div className="flex w-full space-x-3">
-              <button
-                onClick={handleCancelDuplex}
-                disabled={submittingDuplex}
-                className="flex-1 py-3 px-4 rounded-xl border border-gray-300 font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 transition-colors disabled:opacity-50"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                onClick={handleContinueDuplex}
-                disabled={submittingDuplex}
-                className="flex-1 py-3 px-4 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors disabled:opacity-50 flex items-center justify-center"
-              >
-                {submittingDuplex ? <Loader2 className="w-5 h-5 animate-spin" /> : t('common.continue')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {isJobsModalOpen && <JobsModal onClose={() => setIsJobsModalOpen(false)} />}
-      <div className="flex justify-between items-center mb-4 shrink-0">
-        <Link to="/printers" className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">
-          <ChevronLeft className="w-4 h-4 mr-1" />
-          {t('printer.back')}
-        </Link>
-        <button
-          onClick={() => setIsJobsModalOpen(true)}
-          className="inline-flex items-center text-sm font-medium text-gray-700 bg-white border border-gray-200 shadow-sm hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 px-4 py-2 rounded-lg transition-all"
-        >
-          <ClipboardList className="w-4 h-4 mr-2" />
-          {t('nav.history')}
-        </button>
-      </div>
-
-      <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm mb-4 shrink-0">
-        <div className="flex items-start space-x-4">
-          <div className="p-3 bg-blue-50 rounded-xl">
-            <PrinterIcon className="w-8 h-8 text-blue-600" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{printer?.name}</h1>
-            <p className="text-gray-500 mt-1">{printer?.location} &bull; {printer?.model}</p>
-            {printer?.description && <p className="text-sm text-gray-400 mt-2">{printer.description}</p>}
-          </div>
-        </div>
-      </div>
-
-      <form id="print-form" onSubmit={handleSubmit} className="flex flex-col lg:flex-row gap-6 items-start">
-        <div className="w-full lg:w-1/2 flex flex-col">
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 shrink-0">{t('printer.document')}</h2>
-
-            <div className="flex flex-col flex-1 min-h-0">
-              <label className="block text-sm font-medium text-gray-700 mb-2 shrink-0">
-                {t('printer.selectFile')} <span className="text-red-500">*</span>
-              </label>
-
-              {imageFiles.length > 0 ? (
-                <ImageFileList
-                  files={imageFiles}
-                  onReorder={setImageFiles}
-                  onReplace={handleReplaceImage}
-                  onDelete={handleDeleteImage}
-                  onAdd={handleAddImages}
-                  limitReached={imageFiles.length >= MAX_IMAGES}
-                  allowDocReplace={imageFiles.length === 1}
-                />
-              ) : (
-                <div
-                  className={`group border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer
-                    ${isDragging ? 'border-blue-500 bg-blue-50' : file ? 'border-green-300 bg-green-50 hover:border-blue-400 hover:bg-blue-50' : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50 bg-gray-50'}`}
-                  onClick={() => fileInputRef.current?.click()}
-                  onDragEnter={handleDragEnter}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                >
-                  <input
-                    type="file"
-                    accept={acceptValue}
-                    multiple
-                    className="hidden"
-                    ref={fileInputRef}
-                    onChange={handleFileChange}
-                  />
-                  {file ? (
-                    <div className="flex flex-col items-center pointer-events-none">
-                      <FileText className={`w-10 h-10 mb-3 transition-colors ${isDragging ? 'text-blue-500' : 'text-green-600 group-hover:text-blue-500'}`} />
-                      <span className={`font-medium transition-colors ${isDragging ? 'text-blue-700' : 'text-green-800 group-hover:text-blue-700'}`}>{file.name}</span>
-                      <span className={`text-xs mt-1 transition-colors ${isDragging ? 'text-blue-600' : 'text-green-600 group-hover:text-blue-600'}`}>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
-                      <button type="button" className={`mt-3 text-xs underline pointer-events-auto transition-colors ${isDragging ? 'text-blue-600' : 'text-green-600 group-hover:text-blue-600'}`} onClick={(e) => {
-                        e.stopPropagation();
-                        setFile(null);
-                        setPreviewVersion(0);
-                        if (fileInputRef.current) fileInputRef.current.value = '';
-                      }}>{t('printer.changeFile')}</button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center pointer-events-none">
-                      <UploadCloud className={`w-10 h-10 mb-3 transition-colors ${isDragging ? 'text-blue-500' : 'text-gray-400 group-hover:text-blue-500'}`} />
-                      <span className={`font-medium transition-colors ${isDragging ? 'text-blue-600' : 'text-gray-600 group-hover:text-blue-600'}`}>{t('printer.tapToSelectWithTypes')}</span>
-                      <span className="text-xs text-gray-400 mt-1">{supportedTypesText}</span>
-                    </div>
-                  )}
+              <h3 className="text-xl font-bold text-gray-900 mb-2">{t('printer.manualDuplexTitle')}</h3>
+              <p className="text-gray-600 text-center mb-4">
+                {t('printer.manualDuplexDesc')}
+              </p>
+              {timeLeft !== null && (
+                <div className="text-sm font-medium text-orange-600 mb-6 bg-orange-50 px-3 py-1 rounded-full text-center flex items-center justify-center space-x-2">
+                  <span>{t('printer.timeLeft')}</span>
+                  <span>{Math.max(0, Math.floor(timeLeft / 1000 / 60))}:{Math.max(0, Math.floor(timeLeft / 1000 % 60)).toString().padStart(2, '0')}</span>
                 </div>
               )}
-            </div>
-
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 mt-6 shrink-0">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.copies')}</label>
-              <input
-                type="number"
-                min="1"
-                max="100"
-                value={copies}
-                onChange={(e) => setCopies(parseInt(e.target.value) || 1)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.collate')}</label>
-              <select
-                value={collate}
-                onChange={(e) => setCollate(e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white transition-shadow appearance-none"
-              >
-                <option value="true">{t('printer.yes')} (1,2,3...1,2,3)</option>
-                <option value="false">{t('printer.no')} (1,1...2,2...)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.pageSet') || 'Page Set'}</label>
-              <select
-                value={pageSet}
-                onChange={(e) => setPageSet(e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white transition-shadow appearance-none"
-              >
-                <option value="all">{t('printer.pageSetAll') || 'All Pages'}</option>
-                <option value="odd">{t('printer.pageSetOdd') || 'Odd Pages'}</option>
-                <option value="even">{t('printer.pageSetEven') || 'Even Pages'}</option>
-              </select>
+              <div className="flex w-full space-x-3">
+                <button
+                  onClick={handleCancelDuplex}
+                  disabled={submittingDuplex}
+                  className="flex-1 py-3 px-4 rounded-xl border border-gray-300 font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 transition-colors disabled:opacity-50"
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={handleContinueDuplex}
+                  disabled={submittingDuplex}
+                  className="flex-1 py-3 px-4 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors disabled:opacity-50 flex items-center justify-center"
+                >
+                  {submittingDuplex ? <Loader2 className="w-5 h-5 animate-spin" /> : t('common.continue')}
+                </button>
+              </div>
             </div>
           </div>
+        )}
+        {isJobsModalOpen && <JobsModal onClose={() => setIsJobsModalOpen(false)} />}
+        <div className="flex justify-between items-center mb-4 shrink-0">
+          <Link to="/printers" className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">
+            <ChevronLeft className="w-4 h-4 mr-1" />
+            {t('printer.back')}
+          </Link>
+          <button
+            onClick={() => setIsJobsModalOpen(true)}
+            className="inline-flex items-center text-sm font-medium text-gray-700 bg-white border border-gray-200 shadow-sm hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 px-4 py-2 rounded-lg transition-all"
+          >
+            <ClipboardList className="w-4 h-4 mr-2" />
+            {t('nav.history')}
+          </button>
+        </div>
 
-          <div className="mt-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.pageRange')}</label>
-            <input
-              type="text"
-              value={pages}
-              onChange={handlePagesChange}
-              placeholder={t('printer.pageRangePlaceholder')}
-              className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:outline-none transition-shadow ${pagesError
-                ? 'border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50'
-                : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
-                }`}
-            />
-            {pagesError && (
-              <p className="mt-1 text-xs text-red-600">{pagesError}</p>
-            )}
-            {previewPageCount && (
-              <p className="mt-1 text-xs text-gray-500">{t('printer.totalPages', { count: previewPageCount })}</p>
-            )}
-            <p className="mt-1 text-xs text-gray-500">{t('printer.pageRangeHelp')}</p>
+        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm mb-4 shrink-0">
+          <div className="flex items-start space-x-4">
+            <div className="p-3 bg-blue-50 rounded-xl">
+              <PrinterIcon className="w-8 h-8 text-blue-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">{printer?.name}</h1>
+              <p className="text-gray-500 mt-1">{printer?.location} &bull; {printer?.model}</p>
+              {printer?.description && <p className="text-sm text-gray-400 mt-2">{printer.description}</p>}
+            </div>
           </div>
+        </div>
 
-          <div className="mt-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.nup')}</label>
-            <div className="flex gap-3">
-              {([1, 2, 4, 6] as const).map((val) => {
-                const cols = val === 6 ? 3 : val === 1 ? 1 : 2;
-                const rows = val === 2 ? 1 : 2;
-                const selected = nup === val;
-                return (
-                  <label
-                    key={val}
-                    className={`flex-1 flex flex-col items-center py-3 px-2 border rounded-xl cursor-pointer transition-all ${
-                      isNupDisabled ? 'opacity-50 cursor-not-allowed' : ''
-                    } ${selected ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-gray-200 hover:bg-gray-50 hover:border-gray-300'}`}
+        <form id="print-form" onSubmit={handleSubmit} className="flex flex-col lg:flex-row gap-6 items-start">
+          <div className="w-full lg:w-1/2 flex flex-col">
+            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 shrink-0">{t('printer.document')}</h2>
+
+              <div className="flex flex-col flex-1 min-h-0">
+                <div className="flex border-b border-gray-200 mb-4 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleTabSwitch('file')}
+                    className={`flex-1 py-2.5 text-sm font-medium text-center border-b-2 transition-colors ${sourceTab === 'file'
+                        ? 'border-blue-600 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
                   >
+                    {t('printer.tabUploadFile')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTabSwitch('feishu')}
+                    className={`flex-1 py-2.5 text-sm font-medium text-center border-b-2 transition-colors ${sourceTab === 'feishu'
+                        ? 'border-blue-600 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
+                  >
+                    {t('printer.tabFeishu')}
+                  </button>
+                </div>
+
+                {sourceTab === 'file' ? (
+                  <>
+                    <label className="block text-sm font-medium text-gray-700 mb-2 shrink-0">
+                      {t('printer.selectFile')} <span className="text-red-500">*</span>
+                    </label>
+
+                    {imageFiles.length > 0 ? (
+                      <ImageFileList
+                        files={imageFiles}
+                        onReorder={setImageFiles}
+                        onReplace={handleReplaceImage}
+                        onDelete={handleDeleteImage}
+                        onAdd={handleAddImages}
+                        limitReached={imageFiles.length >= MAX_IMAGES}
+                        allowDocReplace={imageFiles.length === 1}
+                      />
+                    ) : (
+                      <div
+                        className={`group border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer
+                        ${isDragging ? 'border-blue-500 bg-blue-50' : file ? 'border-green-300 bg-green-50 hover:border-blue-400 hover:bg-blue-50' : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50 bg-gray-50'}`}
+                        onClick={() => fileInputRef.current?.click()}
+                        onDragEnter={handleDragEnter}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                      >
+                        <input
+                          type="file"
+                          accept={acceptValue}
+                          multiple
+                          className="hidden"
+                          ref={fileInputRef}
+                          onChange={handleFileChange}
+                        />
+                        {file ? (
+                          <div className="flex flex-col items-center pointer-events-none">
+                            <FileText className={`w-10 h-10 mb-3 transition-colors ${isDragging ? 'text-blue-500' : 'text-green-600 group-hover:text-blue-500'}`} />
+                            <span className={`font-medium transition-colors ${isDragging ? 'text-blue-700' : 'text-green-800 group-hover:text-blue-700'}`}>{file.name}</span>
+                            <span className={`text-xs mt-1 transition-colors ${isDragging ? 'text-blue-600' : 'text-green-600 group-hover:text-blue-600'}`}>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                            <button type="button" className={`mt-3 text-xs underline pointer-events-auto transition-colors ${isDragging ? 'text-blue-600' : 'text-green-600 group-hover:text-blue-600'}`} onClick={(e) => {
+                              e.stopPropagation();
+                              setFile(null);
+                              setPreviewVersion(0);
+                              if (fileInputRef.current) fileInputRef.current.value = '';
+                            }}>{t('printer.changeFile')}</button>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center pointer-events-none">
+                            <UploadCloud className={`w-10 h-10 mb-3 transition-colors ${isDragging ? 'text-blue-500' : 'text-gray-400 group-hover:text-blue-500'}`} />
+                            <span className={`font-medium transition-colors ${isDragging ? 'text-blue-600' : 'text-gray-600 group-hover:text-blue-600'}`}>{t('printer.tapToSelectWithTypes')}</span>
+                            <span className="text-xs text-gray-400 mt-1">{supportedTypesText}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <label className="block text-sm font-medium text-gray-700 mb-2 shrink-0">
+                      {t('printer.feishuUrlLabel')} <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="url"
+                      value={feishuUrl}
+                      onChange={handleFeishuUrlChange}
+                      placeholder={t('printer.feishuUrlPlaceholder')}
+                      className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:outline-none transition-shadow ${feishuUrlError
+                          ? 'border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50'
+                          : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+                        }`}
+                    />
+                    {feishuUrlError && (
+                      <p className="mt-1 text-xs text-red-600">{feishuUrlError}</p>
+                    )}
+                    {previewLoading && sourceTab === 'feishu' && (
+                      <p className="mt-2 text-xs text-gray-500 flex items-center">
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        {t('printer.feishuPreviewLoading')}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 mt-6 shrink-0">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.copies')}</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={copies}
+                    onChange={(e) => setCopies(parseInt(e.target.value) || 1)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.collate')}</label>
+                  <select
+                    value={collate}
+                    onChange={(e) => setCollate(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white transition-shadow appearance-none"
+                  >
+                    <option value="true">{t('printer.yes')} (1,2,3...1,2,3)</option>
+                    <option value="false">{t('printer.no')} (1,1...2,2...)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.pageSet') || 'Page Set'}</label>
+                  <select
+                    value={pageSet}
+                    onChange={(e) => setPageSet(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white transition-shadow appearance-none"
+                  >
+                    <option value="all">{t('printer.pageSetAll') || 'All Pages'}</option>
+                    <option value="odd">{t('printer.pageSetOdd') || 'Odd Pages'}</option>
+                    <option value="even">{t('printer.pageSetEven') || 'Even Pages'}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.pageRange')}</label>
+                <input
+                  type="text"
+                  value={pages}
+                  onChange={handlePagesChange}
+                  placeholder={t('printer.pageRangePlaceholder')}
+                  className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:outline-none transition-shadow ${pagesError
+                    ? 'border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50'
+                    : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+                    }`}
+                />
+                {pagesError && (
+                  <p className="mt-1 text-xs text-red-600">{pagesError}</p>
+                )}
+                {previewPageCount && (
+                  <p className="mt-1 text-xs text-gray-500">{t('printer.totalPages', { count: previewPageCount })}</p>
+                )}
+                <p className="mt-1 text-xs text-gray-500">{t('printer.pageRangeHelp')}</p>
+              </div>
+
+              <div className="mt-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.nup')}</label>
+                <div className="flex gap-3">
+                  {([1, 2, 4, 6] as const).map((val) => {
+                    const cols = val === 6 ? 3 : val === 1 ? 1 : 2;
+                    const rows = val === 2 ? 1 : 2;
+                    const selected = nup === val;
+                    return (
+                      <label
+                        key={val}
+                        className={`flex-1 flex flex-col items-center py-3 px-2 border rounded-xl cursor-pointer transition-all ${isNupDisabled ? 'opacity-50 cursor-not-allowed' : ''
+                          } ${selected ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-gray-200 hover:bg-gray-50 hover:border-gray-300'}`}
+                      >
+                        <input
+                          type="radio"
+                          name="nup"
+                          value={val}
+                          checked={selected}
+                          onChange={() => !isNupDisabled && setNup(val)}
+                          disabled={isNupDisabled}
+                          className="sr-only"
+                        />
+                        <svg width="40" height="52" viewBox="0 0 40 52" className="mb-1.5">
+                          <rect x="1" y="1" width="38" height="50" rx="2.5" fill="white" stroke={selected ? '#3b82f6' : '#d1d5db'} strokeWidth="1.2" />
+                          {val === 1 ? (
+                            <rect x="4" y="4" width="32" height="44" rx="1" fill={selected ? '#dbeafe' : '#f3f4f6'} />
+                          ) : (
+                            <>
+                              {cols > 1 && Array.from({ length: cols - 1 }).map((_, i) => (
+                                <line key={`v-${i}`} x1={1 + (i + 1) * 38 / cols} y1="1" x2={1 + (i + 1) * 38 / cols} y2="51" stroke={selected ? '#93c5fd' : '#e5e7eb'} strokeWidth="0.6" />
+                              ))}
+                              {rows > 1 && Array.from({ length: rows - 1 }).map((_, i) => (
+                                <line key={`h-${i}`} x1="1" y1={1 + (i + 1) * 50 / rows} x2="39" y2={1 + (i + 1) * 50 / rows} stroke={selected ? '#93c5fd' : '#e5e7eb'} strokeWidth="0.6" />
+                              ))}
+                              <rect x="1.5" y="1.5" width={38 / cols - 2} height={50 / rows - 2} rx="1" fill={selected ? '#dbeafe' : '#f3f4f6'} />
+                            </>
+                          )}
+                        </svg>
+                        <span className={`text-xs font-medium ${selected ? 'text-blue-700' : 'text-gray-500'}`}>
+                          {val === 1 ? t('printer.nupOff') : t('printer.nupValue', { n: val })}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {nup > 1 && (
+                <div className="mt-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.nupDirection')}</label>
+                  <div className="flex gap-4">
+                    <label className={`flex-1 flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${nupDirection === 'horizontal' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                      <input
+                        type="radio"
+                        name="nupDirection"
+                        value="horizontal"
+                        checked={nupDirection === 'horizontal'}
+                        onChange={() => setNupDirection('horizontal')}
+                        className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                      />
+                      <span className="ml-3 text-sm font-medium text-gray-900">{t('printer.nupHorizontal')}</span>
+                    </label>
+                    <label className={`flex-1 flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${nupDirection === 'vertical' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                      <input
+                        type="radio"
+                        name="nupDirection"
+                        value="vertical"
+                        checked={nupDirection === 'vertical'}
+                        onChange={() => setNupDirection('vertical')}
+                        className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                      />
+                      <span className="ml-3 text-sm font-medium text-gray-900">{t('printer.nupVertical')}</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('common.duplex')}</label>
+                <div className="flex gap-4">
+                  <label className="flex-1 w-full flex items-center p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
                     <input
                       type="radio"
-                      name="nup"
-                      value={val}
-                      checked={selected}
-                      onChange={() => !isNupDisabled && setNup(val)}
-                      disabled={isNupDisabled}
-                      className="sr-only"
+                      name="duplex"
+                      value="off"
+                      checked={duplex === 'off'}
+                      onChange={() => setDuplex('off')}
+                      className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                     />
-                    <svg width="40" height="52" viewBox="0 0 40 52" className="mb-1.5">
-                      <rect x="1" y="1" width="38" height="50" rx="2.5" fill="white" stroke={selected ? '#3b82f6' : '#d1d5db'} strokeWidth="1.2" />
-                      {val === 1 ? (
-                        <rect x="4" y="4" width="32" height="44" rx="1" fill={selected ? '#dbeafe' : '#f3f4f6'} />
-                      ) : (
-                        <>
-                          {cols > 1 && Array.from({ length: cols - 1 }).map((_, i) => (
-                            <line key={`v-${i}`} x1={1 + (i + 1) * 38 / cols} y1="1" x2={1 + (i + 1) * 38 / cols} y2="51" stroke={selected ? '#93c5fd' : '#e5e7eb'} strokeWidth="0.6" />
-                          ))}
-                          {rows > 1 && Array.from({ length: rows - 1 }).map((_, i) => (
-                            <line key={`h-${i}`} x1="1" y1={1 + (i + 1) * 50 / rows} x2="39" y2={1 + (i + 1) * 50 / rows} stroke={selected ? '#93c5fd' : '#e5e7eb'} strokeWidth="0.6" />
-                          ))}
-                          <rect x="1.5" y="1.5" width={38 / cols - 2} height={50 / rows - 2} rx="1" fill={selected ? '#dbeafe' : '#f3f4f6'} />
-                        </>
-                      )}
-                    </svg>
-                    <span className={`text-xs font-medium ${selected ? 'text-blue-700' : 'text-gray-500'}`}>
-                      {val === 1 ? t('printer.nupOff') : t('printer.nupValue', { n: val })}
-                    </span>
+                    <span className="ml-3 block text-sm font-medium text-gray-900">{t('printer.simplex')}</span>
                   </label>
-                );
-              })}
-            </div>
-          </div>
-
-          {nup > 1 && (
-            <div className="mt-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.nupDirection')}</label>
-              <div className="flex gap-4">
-                <label className={`flex-1 flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${nupDirection === 'horizontal' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
-                  <input
-                    type="radio"
-                    name="nupDirection"
-                    value="horizontal"
-                    checked={nupDirection === 'horizontal'}
-                    onChange={() => setNupDirection('horizontal')}
-                    className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                  />
-                  <span className="ml-3 text-sm font-medium text-gray-900">{t('printer.nupHorizontal')}</span>
-                </label>
-                <label className={`flex-1 flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${nupDirection === 'vertical' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
-                  <input
-                    type="radio"
-                    name="nupDirection"
-                    value="vertical"
-                    checked={nupDirection === 'vertical'}
-                    onChange={() => setNupDirection('vertical')}
-                    className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                  />
-                  <span className="ml-3 text-sm font-medium text-gray-900">{t('printer.nupVertical')}</span>
-                </label>
-              </div>
-            </div>
-          )}
-
-          <div className="mt-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('common.duplex')}</label>
-              <div className="flex gap-4">
-                <label className="flex-1 w-full flex items-center p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
-                  <input
-                    type="radio"
-                    name="duplex"
-                    value="off"
-                    checked={duplex === 'off'}
-                    onChange={() => setDuplex('off')}
-                    className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                  />
-                  <span className="ml-3 block text-sm font-medium text-gray-900">{t('printer.simplex')}</span>
-                </label>
 
                   <label className={`flex-1 w-full flex items-center p-3 border border-gray-200 rounded-xl cursor-pointer transition-colors ${printer?.duplex_mode === 'off' || isDuplexDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}>
-                  <input
-                    type="radio"
-                    name="duplex"
-                    value="true"
-                    checked={duplex === 'true'}
-                    onChange={() => setDuplex('true')}
-                    disabled={printer?.duplex_mode === 'off' || isDuplexDisabled}
-                    className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 disabled:opacity-50"
-                  />
-                  <div className="ml-3">
-                    <span className="block text-sm font-medium text-gray-900">{t('printer.doubleSided')}</span>
-                    <span className="block text-xs text-gray-500">{t(printer?.duplex_mode === 'auto' ? 'printer.auto' : 'printer.manual')}</span>
-                  </div>
-                </label>
-              </div>
-              {isDuplexDisabled && (
-                <p className="mt-2 text-xs text-gray-500">
-                  {t('printer.duplexDisabledForSinglePage')}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column */}
-        <div className="w-full lg:w-1/2 flex flex-col gap-6">
-          {file && (
-            <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col" style={{ height: 'calc(100vh - 29rem)' }}>
-              <div className="flex items-center justify-between mb-4 shrink-0">
-                <h2 className="text-lg font-semibold text-gray-900">{merging ? t('printer.merging') : t('printer.preview')}</h2>
-                {previewError && (
-                  <button
-                    type="button"
-                    onClick={() => setPreviewVersion((v) => v + 1)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                    aria-label={t('printer.retryPreview')}
-                    title={t('printer.retryPreview')}
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                  </button>
-                )}
-                {!previewError && previewPdfUrl && !previewLoading && (
-                  <button
-                    type="button"
-                    onClick={handleDownloadPreview}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                    aria-label={t('printer.downloadFile')}
-                    title={t('printer.downloadFile')}
-                  >
-                    <Download className="h-4 w-4" />
-                  </button>
+                    <input
+                      type="radio"
+                      name="duplex"
+                      value="true"
+                      checked={duplex === 'true'}
+                      onChange={() => setDuplex('true')}
+                      disabled={printer?.duplex_mode === 'off' || isDuplexDisabled}
+                      className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 disabled:opacity-50"
+                    />
+                    <div className="ml-3">
+                      <span className="block text-sm font-medium text-gray-900">{t('printer.doubleSided')}</span>
+                      <span className="block text-xs text-gray-500">{t(printer?.duplex_mode === 'auto' ? 'printer.auto' : 'printer.manual')}</span>
+                    </div>
+                  </label>
+                </div>
+                {isDuplexDisabled && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    {t('printer.duplexDisabledForSinglePage')}
+                  </p>
                 )}
               </div>
-
-              <DocumentPreview
-                images={(() => {
-                  const sel = getSelectedPages();
-                  if (!sel) return previewImages;
-                  return sel.map((p) => previewImages[p - 1]).filter(Boolean);
-                })()}
-                loading={previewLoading || merging}
-                error={previewError}
-                nup={nup === 1 ? undefined : nup}
-                nupDirection={nupDirection}
-                pageDimensions={pageDimensions}
-              />
             </div>
-          )}
-
-          <div className="hidden lg:block bg-white p-6 rounded-2xl border border-gray-200 shadow-sm shrink-0">
-            <button
-              type="submit"
-              disabled={submitBtnDisabled}
-              className={submitBtnClass}
-            >
-              {submitBtnContent}
-            </button>
           </div>
-        </div>
-      </form>
 
-      {/* Mobile floating submit button */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 p-4 bg-white border-t border-gray-200 shadow-lg">
-        <button
-          form="print-form"
-          type="submit"
-          disabled={submitBtnDisabled}
-          className={submitBtnClass}
-        >
-          {submitBtnContent}
-        </button>
+          {/* Right Column */}
+          <div className="w-full lg:w-1/2 flex flex-col gap-6">
+            {hasDocument && (
+              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col" style={{ height: 'calc(100vh - 29rem)' }}>
+                <div className="flex items-center justify-between mb-4 shrink-0">
+                  <h2 className="text-lg font-semibold text-gray-900">{merging ? t('printer.merging') : t('printer.preview')}</h2>
+                  {previewError && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewVersion((v) => v + 1)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                      aria-label={t('printer.retryPreview')}
+                      title={t('printer.retryPreview')}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </button>
+                  )}
+                  {!previewError && previewPdfUrl && !previewLoading && (
+                    <button
+                      type="button"
+                      onClick={handleDownloadPreview}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                      aria-label={t('printer.downloadFile')}
+                      title={t('printer.downloadFile')}
+                    >
+                      <Download className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+                <DocumentPreview
+                  images={(() => {
+                    const sel = getSelectedPages();
+                    if (!sel) return previewImages;
+                    return sel.map((p) => previewImages[p - 1]).filter(Boolean);
+                  })()}
+                  loading={previewLoading || merging}
+                  error={previewError}
+                  nup={nup === 1 ? undefined : nup}
+                  nupDirection={nupDirection}
+                  pageDimensions={pageDimensions}
+                />
+              </div>
+            )}
+
+            <div className="hidden lg:block bg-white p-6 rounded-2xl border border-gray-200 shadow-sm shrink-0">
+              <button
+                type="submit"
+                disabled={submitBtnDisabled}
+                className={submitBtnClass}
+              >
+                {submitBtnContent}
+              </button>
+            </div>
+          </div>
+        </form>
+
+        {/* Mobile floating submit button */}
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 p-4 bg-white border-t border-gray-200 shadow-lg">
+          <button
+            form="print-form"
+            type="submit"
+            disabled={submitBtnDisabled}
+            className={submitBtnClass}
+          >
+            {submitBtnContent}
+          </button>
+        </div>
       </div>
-    </div>
     </div>
   );
 }
