@@ -9,7 +9,7 @@ import PrinterList from '@/components/PrinterList';
 import { DocumentPreview, renderPdfToImages } from '@/components/DocumentPreview';
 import JobsModal from '@/components/JobsModal';
 import ImageFileList from '@/components/ImageFileList';
-import { apiErrMsg, parseGMTDate, downloadFile, imagesToPdf } from '@/lib/utils';
+import { apiErrMsg, parseGMTDate, downloadFile, imagesToPdf, createNupPdf } from '@/lib/utils';
 import { MAX_IMAGES } from '@/lib/constants';
 
 interface PrinterInfo {
@@ -44,6 +44,7 @@ function PrinterContent() {
   const [supportedFileTypes, setSupportedFileTypes] = useState<string[]>(['pdf']);
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [previewImages, setPreviewImages] = useState<string[]>([]);
+  const [pageDimensions, setPageDimensions] = useState<{pageWidth: number; pageHeight: number}[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewPageCount, setPreviewPageCount] = useState<number | null>(null);
@@ -54,6 +55,8 @@ function PrinterContent() {
   const [pageSet, setPageSet] = useState('all');
   const [pages, setPages] = useState('');
   const [pagesError, setPagesError] = useState('');
+  const [nup, setNup] = useState<1 | 2 | 4 | 6>(1);
+  const [nupDirection, setNupDirection] = useState<'horizontal' | 'vertical'>('horizontal');
 
   const [submitting, setSubmitting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -183,8 +186,36 @@ function PrinterContent() {
     return selectedPages.size;
   };
 
+  const getSelectedPages = (): number[] | null => {
+    if (!pages.trim() && pageSet === 'all') return null;
+
+    let pageList: number[];
+    if (!pages.trim() && previewPageCount) {
+      pageList = Array.from({ length: previewPageCount }, (_, i) => i + 1);
+    } else {
+      const selected = new Set<number>();
+      const parts = pages.trim().split(',').map((p) => p.trim());
+      for (const part of parts) {
+        if (part.includes('-')) {
+          const [start, end] = part.split('-').map(Number);
+          for (let i = start; i <= end; i++) selected.add(i);
+        } else if (part) {
+          selected.add(Number(part));
+        }
+      }
+      pageList = Array.from(selected).sort((a, b) => a - b);
+    }
+
+    if (pageSet !== 'all') {
+      pageList = pageList.filter((p) => (pageSet === 'odd' ? p % 2 !== 0 : p % 2 === 0));
+    }
+
+    return pageList.length > 0 ? pageList : null;
+  };
+
   const selectedPageCount = getSelectedPageCount(pages, previewPageCount);
   const isDuplexDisabled = (previewPageCount !== null && previewPageCount <= 1) || (selectedPageCount === 1);
+  const isNupDisabled = (previewPageCount !== null && previewPageCount <= 1) || (selectedPageCount !== null && selectedPageCount <= 1);
 
   const handlePagesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -234,6 +265,7 @@ function PrinterContent() {
         return null;
       });
       setPreviewImages([]);
+      setPageDimensions([]);
       return;
     }
 
@@ -264,9 +296,10 @@ function PrinterContent() {
           if (oldUrl) URL.revokeObjectURL(oldUrl);
           return objectUrl;
         });
-        const { totalPages, images } = await renderPdfToImages(blob);
+        const { totalPages, images, pageDimensions: dims } = await renderPdfToImages(blob);
         setPreviewPageCount(totalPages);
         setPreviewImages(images);
+        setPageDimensions(dims);
       } catch (err: unknown) {
         // Ignore cancellation errors from rapid file changes.
         if (typeof err === 'object' && err !== null && 'name' in err && err.name === 'CanceledError') {
@@ -274,6 +307,7 @@ function PrinterContent() {
         }
 
         setPreviewImages([]);
+        setPageDimensions([]);
         setPreviewPageCount(null);
         setPreviewPdfUrl((oldUrl) => {
           if (oldUrl) URL.revokeObjectURL(oldUrl);
@@ -343,6 +377,12 @@ function PrinterContent() {
       localStorage.setItem('duplex_preference', duplex);
     }
   }, [duplex, isDuplexDisabled]);
+
+  useEffect(() => {
+    if (isNupDisabled && nup !== 1) {
+      setNup(1);
+    }
+  }, [isNupDisabled, nup]);
 
   useEffect(() => {
     const fetchSupportedFileTypes = async () => {
@@ -417,6 +457,15 @@ function PrinterContent() {
   };
 
   const handleReplaceImage = (index: number, newFile: File) => {
+    if (!isImageFile(newFile)) {
+      if (imageFiles.length === 1 && isSupportedFile(newFile)) {
+        setImageFiles([]);
+        setFile(newFile);
+        return;
+      }
+      toast({ message: t('printer.imageOnly'), type: 'error' });
+      return;
+    }
     setImageFiles((prev) => prev.map((f, i) => (i === index ? newFile : f)));
   };
 
@@ -480,9 +529,24 @@ function PrinterContent() {
 
     setSubmitting(true);
     try {
+      let fileToSubmit = file;
+      const selectedForNup = nup > 1 ? getSelectedPages() : null;
+      if (nup > 1) {
+        try {
+          fileToSubmit = new File(
+            [await createNupPdf(file, nup, nupDirection, selectedForNup ?? undefined)],
+            file.name.replace(/\.[^.]+$/, '') + '_nup.pdf',
+            { type: 'application/pdf' },
+          );
+        } catch {
+          toast({ message: t('printer.nupTransforming') + ' ' + t('error.submit'), type: 'error' });
+          setSubmitting(false);
+          return;
+        }
+      }
       const formData = new FormData();
       formData.append('printer_id', id || '');
-      formData.append('file', file);
+      formData.append('file', fileToSubmit);
 
       const { valid, error: validationError } = validatePageRange(pages, previewPageCount, true);
       if (!valid) {
@@ -534,7 +598,7 @@ function PrinterContent() {
         }
       }
 
-      if (finalPages) {
+      if (finalPages && nup === 1) {
         queryParams.append('pages', finalPages);
       }
 
@@ -728,6 +792,7 @@ function PrinterContent() {
                   onDelete={handleDeleteImage}
                   onAdd={handleAddImages}
                   limitReached={imageFiles.length >= MAX_IMAGES}
+                  allowDocReplace={imageFiles.length === 1}
                 />
               ) : (
                 <div
@@ -807,30 +872,109 @@ function PrinterContent() {
                 <option value="even">{t('printer.pageSetEven') || 'Even Pages'}</option>
               </select>
             </div>
+          </div>
 
-            <div className="sm:col-span-3">
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.pageRange')}</label>
-              <input
-                type="text"
-                value={pages}
-                onChange={handlePagesChange}
-                placeholder={t('printer.pageRangePlaceholder')}
-                className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:outline-none transition-shadow ${pagesError
-                  ? 'border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50'
-                  : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
-                  }`}
-              />
-              {pagesError && (
-                <p className="mt-1 text-xs text-red-600">{pagesError}</p>
-              )}
-              {previewPageCount && (
-                <p className="mt-1 text-xs text-gray-500">{t('printer.totalPages', { count: previewPageCount })}</p>
-              )}
-              <p className="mt-1 text-xs text-gray-500">{t('printer.pageRangeHelp')}</p>
+          <div className="mt-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.pageRange')}</label>
+            <input
+              type="text"
+              value={pages}
+              onChange={handlePagesChange}
+              placeholder={t('printer.pageRangePlaceholder')}
+              className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:outline-none transition-shadow ${pagesError
+                ? 'border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50'
+                : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+                }`}
+            />
+            {pagesError && (
+              <p className="mt-1 text-xs text-red-600">{pagesError}</p>
+            )}
+            {previewPageCount && (
+              <p className="mt-1 text-xs text-gray-500">{t('printer.totalPages', { count: previewPageCount })}</p>
+            )}
+            <p className="mt-1 text-xs text-gray-500">{t('printer.pageRangeHelp')}</p>
+          </div>
+
+          <div className="mt-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.nup')}</label>
+            <div className="flex gap-3">
+              {([1, 2, 4, 6] as const).map((val) => {
+                const cols = val === 6 ? 3 : val === 1 ? 1 : 2;
+                const rows = val === 2 ? 1 : 2;
+                const selected = nup === val;
+                return (
+                  <label
+                    key={val}
+                    className={`flex-1 flex flex-col items-center py-3 px-2 border rounded-xl cursor-pointer transition-all ${
+                      isNupDisabled ? 'opacity-50 cursor-not-allowed' : ''
+                    } ${selected ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-gray-200 hover:bg-gray-50 hover:border-gray-300'}`}
+                  >
+                    <input
+                      type="radio"
+                      name="nup"
+                      value={val}
+                      checked={selected}
+                      onChange={() => !isNupDisabled && setNup(val)}
+                      disabled={isNupDisabled}
+                      className="sr-only"
+                    />
+                    <svg width="40" height="52" viewBox="0 0 40 52" className="mb-1.5">
+                      <rect x="1" y="1" width="38" height="50" rx="2.5" fill="white" stroke={selected ? '#3b82f6' : '#d1d5db'} strokeWidth="1.2" />
+                      {val === 1 ? (
+                        <rect x="4" y="4" width="32" height="44" rx="1" fill={selected ? '#dbeafe' : '#f3f4f6'} />
+                      ) : (
+                        <>
+                          {cols > 1 && Array.from({ length: cols - 1 }).map((_, i) => (
+                            <line key={`v-${i}`} x1={1 + (i + 1) * 38 / cols} y1="1" x2={1 + (i + 1) * 38 / cols} y2="51" stroke={selected ? '#93c5fd' : '#e5e7eb'} strokeWidth="0.6" />
+                          ))}
+                          {rows > 1 && Array.from({ length: rows - 1 }).map((_, i) => (
+                            <line key={`h-${i}`} x1="1" y1={1 + (i + 1) * 50 / rows} x2="39" y2={1 + (i + 1) * 50 / rows} stroke={selected ? '#93c5fd' : '#e5e7eb'} strokeWidth="0.6" />
+                          ))}
+                          <rect x="1.5" y="1.5" width={38 / cols - 2} height={50 / rows - 2} rx="1" fill={selected ? '#dbeafe' : '#f3f4f6'} />
+                        </>
+                      )}
+                    </svg>
+                    <span className={`text-xs font-medium ${selected ? 'text-blue-700' : 'text-gray-500'}`}>
+                      {val === 1 ? t('printer.nupOff') : t('printer.nupValue', { n: val })}
+                    </span>
+                  </label>
+                );
+              })}
             </div>
+          </div>
 
-            <div className="sm:col-span-3">
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('common.duplex')}</label>
+          {nup > 1 && (
+            <div className="mt-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.nupDirection')}</label>
+              <div className="flex gap-4">
+                <label className={`flex-1 flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${nupDirection === 'horizontal' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                  <input
+                    type="radio"
+                    name="nupDirection"
+                    value="horizontal"
+                    checked={nupDirection === 'horizontal'}
+                    onChange={() => setNupDirection('horizontal')}
+                    className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                  />
+                  <span className="ml-3 text-sm font-medium text-gray-900">{t('printer.nupHorizontal')}</span>
+                </label>
+                <label className={`flex-1 flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${nupDirection === 'vertical' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                  <input
+                    type="radio"
+                    name="nupDirection"
+                    value="vertical"
+                    checked={nupDirection === 'vertical'}
+                    onChange={() => setNupDirection('vertical')}
+                    className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                  />
+                  <span className="ml-3 text-sm font-medium text-gray-900">{t('printer.nupVertical')}</span>
+                </label>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t('common.duplex')}</label>
               <div className="flex gap-4">
                 <label className="flex-1 w-full flex items-center p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
                   <input
@@ -868,7 +1012,6 @@ function PrinterContent() {
             </div>
           </div>
         </div>
-        </div>
 
         {/* Right Column */}
         <div className="w-full lg:w-1/2 flex flex-col gap-6">
@@ -901,9 +1044,16 @@ function PrinterContent() {
               </div>
 
               <DocumentPreview
-                images={previewImages}
+                images={(() => {
+                  const sel = getSelectedPages();
+                  if (!sel) return previewImages;
+                  return sel.map((p) => previewImages[p - 1]).filter(Boolean);
+                })()}
                 loading={previewLoading || merging}
                 error={previewError}
+                nup={nup === 1 ? undefined : nup}
+                nupDirection={nupDirection}
+                pageDimensions={pageDimensions}
               />
             </div>
           )}

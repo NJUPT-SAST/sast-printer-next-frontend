@@ -28,6 +28,7 @@ interface ImageFileListProps {
   onDelete: (index: number) => void;
   onAdd: (files: File[]) => void;
   limitReached: boolean;
+  allowDocReplace?: boolean;
 }
 
 interface RowProps {
@@ -40,11 +41,13 @@ interface RowProps {
   onExternalDrop: (e: React.DragEvent, zone: 'replace' | 'insert-before', index: number) => void;
   onExternalDragLeave: () => void;
   dropTarget: { type: 'replace' | 'insert-before' | 'add'; index: number } | null;
+  allowDocReplace?: boolean;
 }
 
 function SortableRow({
   file, index, id, onReplace, onDelete,
   onExternalDragOver, onExternalDrop, onExternalDragLeave, dropTarget,
+  allowDocReplace,
 }: RowProps) {
   const { t } = useTranslation();
   const replaceInputRef = useRef<HTMLInputElement>(null);
@@ -81,7 +84,7 @@ function SortableRow({
           if (!e.dataTransfer.types.includes('Files')) return;
           const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
           const zone = e.clientY < rect.top + rect.height / 2 ? 'insert-before' : 'replace';
-          onExternalDrop(e, zone, index);
+          onExternalDrop(e, zone, index, allowDocReplace);
         }}
         onDragLeave={onExternalDragLeave}
       >
@@ -117,7 +120,7 @@ function SortableRow({
         <input
           ref={replaceInputRef}
           type="file"
-          accept={IMAGE_ACCEPT}
+          accept={allowDocReplace ? undefined : IMAGE_ACCEPT}
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
@@ -145,7 +148,7 @@ function SortableRow({
   );
 }
 
-export default function ImageFileList({ files, onReorder, onReplace, onDelete, onAdd, limitReached }: ImageFileListProps) {
+export default function ImageFileList({ files, onReorder, onReplace, onDelete, onAdd, limitReached, allowDocReplace }: ImageFileListProps) {
   const { t } = useTranslation();
   const { toast } = useUi();
   const addInputRef = useRef<HTMLInputElement>(null);
@@ -184,11 +187,15 @@ export default function ImageFileList({ files, onReorder, onReplace, onDelete, o
     e: React.DragEvent,
     zone: 'replace' | 'insert-before',
     index: number,
+    allowDocReplace?: boolean,
   ) => {
     e.preventDefault();
     e.stopPropagation();
     setDropTarget(null);
-    const incoming = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'));
+    const isReplaceAllowed = zone === 'replace' && allowDocReplace;
+    const incoming = isReplaceAllowed
+      ? Array.from(e.dataTransfer.files)
+      : Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'));
     if (!incoming.length) return;
     if (zone === 'replace') {
       onReplace(index, incoming[0]);
@@ -206,7 +213,7 @@ export default function ImageFileList({ files, onReorder, onReplace, onDelete, o
       next.splice(index, 0, ...toInsert);
       onReorder(next);
     }
-  }, [files, onReplace, onReorder, toast, t]);
+  }, [files, onReplace, onReorder, toast, t, allowDocReplace]);
 
   const handleAddZoneDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -233,6 +240,7 @@ export default function ImageFileList({ files, onReorder, onReplace, onDelete, o
                 onExternalDrop={handleExternalDrop}
                 onExternalDragLeave={() => setDropTarget(null)}
                 dropTarget={dropTarget}
+                allowDocReplace={allowDocReplace}
               />
             ))}
           </SortableContext>
