@@ -113,26 +113,28 @@ export const getOptimalLayout = (
     ...NUP_GRIDS[nup], rotate: false, coverage: 0, _aspectMatch: 0,
   };
   const srcAspect = pageWidth / pageHeight;
+  const sheets = [{ w: A4.width, h: A4.height }, { w: A4.height, h: A4.width }];
 
-  for (let cols = nup; cols >= 1; cols--) {
-    if (nup % cols !== 0) continue;
-    const rows = nup / cols;
-    const cellW = A4.width / cols;
-    const cellH = A4.height / rows;
-    const cellAspect = cellW / cellH;
+  for (const sheet of sheets) {
+    for (let cols = nup; cols >= 1; cols--) {
+      if (nup % cols !== 0) continue;
+      const rows = nup / cols;
+      const cellW = sheet.w / cols;
+      const cellH = sheet.h / rows;
+      const cellAspect = cellW / cellH;
 
-    const scale = Math.min(cellW / pageWidth, cellH / pageHeight);
-    const coverage = (pageWidth * scale * pageHeight * scale * nup) / (A4.width * A4.height);
+      const scale = Math.min(cellW / pageWidth, cellH / pageHeight);
+      const coverage = (pageWidth * scale * pageHeight * scale * nup) / (sheet.w * sheet.h);
 
-    // Prefer layout where cell orientation matches page orientation when coverage ties
-    const aspectMatch = -Math.abs(cellAspect - srcAspect);
+      const aspectMatch = -Math.abs(cellAspect - srcAspect);
 
-    if (coverage > best.coverage + 1e-6 || (Math.abs(coverage - best.coverage) < 1e-6 && aspectMatch > best._aspectMatch)) {
-      best = { cols, rows, rotate: false, coverage, _aspectMatch: aspectMatch };
+      if (coverage > best.coverage + 1e-6 || (Math.abs(coverage - best.coverage) < 1e-6 && aspectMatch > best._aspectMatch)) {
+        best = { cols, rows, rotate: sheet.w === A4.height, coverage, _aspectMatch: aspectMatch };
+      }
     }
   }
 
-  return { cols: best.cols, rows: best.rows, rotate: false };
+  return { cols: best.cols, rows: best.rows, rotate: best.rotate };
 };
 
 export const createNupPdf = async (
@@ -140,6 +142,7 @@ export const createNupPdf = async (
   nup: NupValue | 1,
   direction: 'horizontal' | 'vertical',
   selectedPages?: number[],
+  pageDims?: { pageWidth: number; pageHeight: number },
 ): Promise<Blob> => {
   if (nup === 1) return new Blob([await file.arrayBuffer()], { type: 'application/pdf' });
 
@@ -155,14 +158,20 @@ export const createNupPdf = async (
   const embeddedPages = await outDoc.embedPdf(srcDoc, indices);
   const totalPages = indices.length;
 
-  const { cols, rows } = getOptimalLayout(embeddedPages[0].width, embeddedPages[0].height, nup);
-  const cellW = A4.width / cols;
-  const cellH = A4.height / rows;
+  const { cols, rows, rotate } = getOptimalLayout(
+    pageDims?.pageWidth ?? embeddedPages[0].width,
+    pageDims?.pageHeight ?? embeddedPages[0].height,
+    nup,
+  );
+  const sheetW = rotate ? A4.height : A4.width;
+  const sheetH = rotate ? A4.width : A4.height;
+  const cellW = sheetW / cols;
+  const cellH = sheetH / rows;
 
   const sheetCount = Math.ceil(totalPages / nup);
 
   for (let sheet = 0; sheet < sheetCount; sheet++) {
-    const outPage = outDoc.addPage([A4.width, A4.height]);
+    const outPage = outDoc.addPage([sheetW, sheetH]);
 
     for (let slot = 0; slot < nup; slot++) {
       const srcIdx = sheet * nup + slot;
@@ -183,7 +192,7 @@ export const createNupPdf = async (
       const drawW = ep.width * scale;
       const drawH = ep.height * scale;
       const x = col * cellW + (cellW - drawW) / 2;
-      const y = A4.height - (row + 1) * cellH + (cellH - drawH) / 2;
+      const y = sheetH - (row + 1) * cellH + (cellH - drawH) / 2;
       outPage.drawPage(ep, { x, y, width: drawW, height: drawH });
     }
   }

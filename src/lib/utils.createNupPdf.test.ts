@@ -53,13 +53,13 @@ describe('createNupPdf', () => {
     expect(await pdfPageCount(out)).toBe(1);
   });
 
-  it('output page size is A4 (595x842)', async () => {
+  it('output page size is landscape A4 for 2-up with A4 source pages', async () => {
     const src = blobToFile(await makePdfBlob(4));
     const out = await createNupPdf(src, 2, 'horizontal');
     const doc = await PDFDocument.load(await out.arrayBuffer());
     const page = doc.getPage(0);
-    expect(page.getSize().width).toBe(595);
-    expect(page.getSize().height).toBe(842);
+    expect(page.getSize().width).toBe(842);
+    expect(page.getSize().height).toBe(595);
   });
 
   it('vertical-first direction', async () => {
@@ -88,17 +88,18 @@ describe('createNupPdf', () => {
 });
 
 describe('getOptimalLayout', () => {
-  it('A4 portrait with 2-up uses 2x1', () => {
+  it('A4 portrait with 2-up uses landscape sheet 2x1 for 100% coverage', () => {
     const r = getOptimalLayout(595, 842, 2);
     expect(r.cols).toBe(2);
     expect(r.rows).toBe(1);
-    expect(r.rotate).toBe(false);
+    expect(r.rotate).toBe(true);
   });
 
-  it('landscape 4:3 with 2-up prefers 1x2', () => {
+  it('landscape 4:3 with 2-up prefers 1x2 on portrait sheet', () => {
     const r = getOptimalLayout(800, 600, 2);
     expect(r.cols).toBe(1);
     expect(r.rows).toBe(2);
+    expect(r.rotate).toBe(false);
   });
 
   it('square source with 4-up uses 2x2', () => {

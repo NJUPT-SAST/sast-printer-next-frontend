@@ -36,8 +36,10 @@ export const renderPdfToImages = async (blob: Blob) => {
 
     await page.render({ canvas, canvasContext: context, viewport }).promise;
     images.push(canvas.toDataURL('image/png'));
-    const dims = viewport.rawDims as { pageWidth: number; pageHeight: number };
-    pageDimensions.push({ pageWidth: dims.pageWidth, pageHeight: dims.pageHeight });
+    pageDimensions.push({
+      pageWidth: viewport.width / viewport.scale,
+      pageHeight: viewport.height / viewport.scale,
+    });
   }
 
   await doc.destroy();

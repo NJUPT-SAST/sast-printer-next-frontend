@@ -534,7 +534,7 @@ function PrinterContent() {
       if (nup > 1) {
         try {
           fileToSubmit = new File(
-            [await createNupPdf(file, nup, nupDirection, selectedForNup ?? undefined)],
+            [await createNupPdf(file, nup, nupDirection, selectedForNup ?? undefined, pageDimensions[0])],
             file.name.replace(/\.[^.]+$/, '') + '_nup.pdf',
             { type: 'application/pdf' },
           );
