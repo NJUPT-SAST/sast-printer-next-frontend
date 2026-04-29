@@ -87,6 +87,9 @@ function PrinterContent() {
     return supportedFileTypes.includes(ext);
   };
 
+  const FEISHU_URL_RE = /^https:\/\/[^/]+\.feishu\.cn\/(docx|doc|sheets|bitable|mindnotes|wiki)\/[A-Za-z0-9_-]{27}([?#].*)?$/;
+  const isValidFeishuUrl = (url: string) => FEISHU_URL_RE.test(url.trim());
+
   const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']);
   const isImageFile = (f: File) => IMAGE_EXTS.has(getFileExtension(f.name));
 
@@ -259,7 +262,7 @@ function PrinterContent() {
     }
   }, [manualDuplexHook]);
 
-  const hasDocument = sourceTab === 'file' ? !!file : !!feishuUrl.trim();
+  const hasDocument = sourceTab === 'file' ? !!file : isValidFeishuUrl(feishuUrl);
 
   useEffect(() => {
     if (!hasDocument) {
@@ -331,8 +334,12 @@ function PrinterContent() {
 
         let msg = t('printer.previewLoadFailed');
         if (err instanceof Error) msg = err.message;
-        const anyErr = err as { response?: { data?: { error?: string } } };
-        if (anyErr.response?.data?.error) msg = anyErr.response.data.error;
+        const anyErr = err as { response?: { status?: number; data?: { error?: string } } };
+        if (anyErr.response?.status === 403) {
+          msg = t('printer.feishuForbidden');
+        } else if (anyErr.response?.data?.error) {
+          msg = anyErr.response.data.error;
+        }
         setPreviewError(msg);
       } finally {
         setPreviewLoading(false);
@@ -509,7 +516,7 @@ function PrinterContent() {
   const handleFeishuUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setFeishuUrl(value);
-    if (value.trim() && !/^https:\/\/.+\.feishu\.cn\/(docx|doc|sheets|bitable|mindnotes|wiki)\/.+/i.test(value.trim())) {
+    if (value.trim() && !isValidFeishuUrl(value)) {
       setFeishuUrlError(t('printer.feishuUrlInvalid'));
     } else {
       setFeishuUrlError('');
@@ -690,7 +697,9 @@ function PrinterContent() {
       }
 
     } catch (err: unknown) {
-      toast({ message: `${t('error.submit')}: ${apiErrMsg(err, t('error.submit'))}`, type: 'error' });
+      const errStatus = (err as { response?: { status?: number } }).response?.status;
+      const fallback = errStatus === 403 ? t('printer.feishuForbidden') : t('error.submit');
+      toast({ message: `${t('error.submit')}: ${apiErrMsg(err, fallback)}`, type: 'error' });
     } finally {
       setSubmitting(false);
     }
