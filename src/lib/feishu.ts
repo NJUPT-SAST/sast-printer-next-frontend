@@ -135,7 +135,12 @@ export async function openDocPicker(options: {
         options.complete?.();
       },
       fail(res) {
-        options.fail?.(res.errMsg ?? 'docsPicker failed');
+        const msg = res.errMsg ?? '';
+        if (msg === '' || /cancel|denied|取消|no.?perm/i.test(msg)) {
+          options.complete?.();
+          return;
+        }
+        options.fail?.(msg || 'docsPicker failed');
         options.complete?.();
       },
     });
