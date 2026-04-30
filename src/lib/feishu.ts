@@ -76,8 +76,11 @@ async function ensureJSAPIConfig(): Promise<void> {
 
     await new Promise<void>((resolve, reject) => {
       const onReady = () => resolve();
-      const onError = (err: { errMsg?: string }) => {
-        reject(new Error(err?.errMsg || 'JSSDK config failed'));
+      const onError = (err: unknown) => {
+        const detail = (() => {
+          try { return JSON.stringify(err); } catch { return String(err); }
+        })();
+        reject(new Error(`h5sdk config failed: ${detail}`));
       };
       h5sdk.ready?.(onReady);
       h5sdk.error?.(onError);
