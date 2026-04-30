@@ -10,6 +10,7 @@ import { DocumentPreview, renderPdfToImages } from '@/components/DocumentPreview
 import JobsModal from '@/components/JobsModal';
 import ImageFileList from '@/components/ImageFileList';
 import { apiErrMsg, parseGMTDate, downloadFile, imagesToPdf, createNupPdf } from '@/lib/utils';
+import { isInFeishu, openDocPicker } from '@/lib/feishu';
 import { MAX_IMAGES } from '@/lib/constants';
 
 interface PrinterInfo {
@@ -61,6 +62,7 @@ function PrinterContent() {
   const [sourceTab, setSourceTab] = useState<'file' | 'feishu'>('file');
   const [feishuUrl, setFeishuUrl] = useState('');
   const [feishuUrlError, setFeishuUrlError] = useState('');
+  const [pickerLoading, setPickerLoading] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -523,6 +525,25 @@ function PrinterContent() {
     }
   };
 
+  const handleOpenDocPicker = async () => {
+    setPickerLoading(true);
+    try {
+      const files = await openDocPicker();
+      if (files.length === 0) return;
+      const url = files[0].filePath;
+      setFeishuUrl(url);
+      if (!isValidFeishuUrl(url)) {
+        setFeishuUrlError(t('printer.feishuUrlInvalid'));
+      } else {
+        setFeishuUrlError('');
+      }
+    } catch {
+      // user cancelled or API unavailable
+    } finally {
+      setPickerLoading(false);
+    }
+  };
+
   const handleTabSwitch = (tab: 'file' | 'feishu') => {
     setSourceTab(tab);
     if (tab === 'feishu') {
@@ -971,6 +992,20 @@ function PrinterContent() {
                         </button>
                       )}
                     </div>
+                    {isInFeishu() && (
+                      <button
+                        type="button"
+                        onClick={handleOpenDocPicker}
+                        disabled={pickerLoading || previewLoading}
+                        className="mt-2 inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {pickerLoading ? (
+                          <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />{t('printer.feishuPickDocLoading')}</>
+                        ) : (
+                          t('printer.feishuPickDoc')
+                        )}
+                      </button>
+                    )}
                     {feishuUrlError && (
                       <p className="mt-1 text-xs text-red-600">{feishuUrlError}</p>
                     )}
