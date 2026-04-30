@@ -13,13 +13,23 @@ export interface ScannerOption {
   constraint_type: string;
   constraint: unknown;
   value: unknown;
+  options?: string[];
+  limits?: number[];
+  interval?: number;
+  default?: unknown;
+}
+
+export interface ScannerSettings {
+  filters?: { options?: string[] };
+  [key: string]: unknown;
 }
 
 export interface Scanner {
   id: string;
   name: string;
   features: Record<string, ScannerOption>;
-  settings: Record<string, unknown>;
+  settings: ScannerSettings;
+  pipelines?: string[];
   [key: string]: unknown;
 }
 

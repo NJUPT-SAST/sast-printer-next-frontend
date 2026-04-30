@@ -6,7 +6,7 @@
     "nav.scanner": "扫描仪",
     "home.title": "可用打印机",
     "home.history": "查看任务队列",
-    "home.userManual": "使用说明文档",
+    "home.userManual": "使用说明",
     "home.noPrinters": "未找到打印机",
     "home.noPrintersDesc": "当前网络中没有可用的打印机。",
     "common.location": "位置",

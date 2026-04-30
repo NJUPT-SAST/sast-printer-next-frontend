@@ -16,7 +16,7 @@ export default function Home() {
           className="flex items-center text-sm font-medium text-gray-600 hover:text-blue-600 hover:bg-blue-50 transition-colors bg-white/80 backdrop-blur rounded-full px-4 py-2 shadow-sm border border-gray-200"
         >
           <BookOpen className="w-4 h-4 mr-2" />
-          {t('home.userManual') || "使用说明文档"}
+          {t('home.userManual')}
         </a>
       </div>
 

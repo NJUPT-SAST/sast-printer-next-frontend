@@ -27,25 +27,30 @@ export function isInFeishu(): boolean {
   return typeof window !== 'undefined' && !!window.tt?.docsPicker;
 }
 
-export function openDocPicker(
-  options?: { pickerTitle?: string; pickerConfirm?: string },
-): Promise<DocPickerFile[]> {
-  return new Promise((resolve, reject) => {
-    const tt = window.tt;
-    if (!tt?.docsPicker) {
-      reject(new Error('docsPicker not available'));
-      return;
-    }
+export function openDocPicker(options: {
+  pickerTitle?: string;
+  pickerConfirm?: string;
+  success: (files: DocPickerFile[]) => void;
+  fail?: (err: string) => void;
+  complete?: () => void;
+}): void {
+  const tt = window.tt;
+  if (!tt?.docsPicker) {
+    options.fail?.('docsPicker not available');
+    options.complete?.();
+    return;
+  }
 
-    tt.docsPicker({
-      pickerTitle: options?.pickerTitle ?? '选择云文档',
-      pickerConfirm: options?.pickerConfirm ?? '选择',
-      success(res) {
-        resolve(res.fileList ?? []);
-      },
-      fail(res) {
-        reject(new Error(res.errMsg ?? 'docsPicker failed'));
-      },
-    });
+  tt.docsPicker({
+    pickerTitle: options.pickerTitle ?? '选择云文档',
+    pickerConfirm: options.pickerConfirm ?? '选择',
+    success(res) {
+      options.success(res.fileList ?? []);
+      options.complete?.();
+    },
+    fail(res) {
+      options.fail?.(res.errMsg ?? 'docsPicker failed');
+      options.complete?.();
+    },
   });
 }

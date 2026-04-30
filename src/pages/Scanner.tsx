@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useTranslation } from '@/lib/i18n';
 import { useUi } from '@/components/ui-context';
 import { fetchContext, submitScan, downloadScanFile, getScanFiles, deleteScanFile, type Scanner, type PaperSize, type ScanFile } from '@/lib/scannerApi';
@@ -21,7 +21,7 @@ export default function ScannerPage() {
   const [pipeline, setPipeline] = useState<string>(() => localStorage.getItem('scanner_last_pipeline') || 'Scan as PNG');
 
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [advancedSettings, setAdvancedSettings] = useState<Record<string, any>>({});
+  const [advancedSettings, setAdvancedSettings] = useState<Record<string, string | number>>({});
   const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
 
   const [files, setFiles] = useState<ScanFile[]>([]);
@@ -45,6 +45,49 @@ export default function ScannerPage() {
     }
   };
 
+  const loadDevices = async () => {
+    try {
+      setLoadingContext(true);
+      setErrorContext(false);
+
+      let mapping: Record<string, string> | null = null;
+      try {
+        const res = await fetch('/scannerMapping.json');
+        if (res.ok) {
+          mapping = await res.json();
+        }
+      } catch (e) {
+        console.warn('Could not load scannerMapping.json', e);
+      }
+
+      const contextData = await fetchContext();
+      let devs = contextData.devices;
+      setPaperSizes(contextData.paperSizes);
+
+      if (mapping) {
+        devs = devs.filter((d: Scanner) => mapping![d.id] || mapping![d.name]);
+        devs = devs.map((d: Scanner) => ({
+          ...d,
+          name: mapping![d.id] || mapping![d.name] || d.name
+        }));
+      }
+
+      setDevices(devs);
+
+      if (devs.length === 1) {
+        setSelectedScannerId(devs[0].id);
+      } else if (devs.length > 0 && !devs.find(d => d.id === selectedScannerId)) {
+        setSelectedScannerId(devs[0].id);
+      }
+    } catch (err) {
+      console.error(err);
+      setErrorContext(true);
+      toast({ message: t('scanner.error') || 'Failed to load scanners', type: 'error' });
+    } finally {
+      setLoadingContext(false);
+    }
+  };
+
   useEffect(() => {
     const init = async () => {
       await loadDevices();
@@ -54,34 +97,36 @@ export default function ScannerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    let initialAdvancedSettings: Record<string, any> = {};
-    
+  const defaultAdvancedSettings = useMemo<Record<string, string | number>>(() => {
     const a4Size = paperSizes.find(p => p.name.toLowerCase().includes('a4'));
     if (a4Size) {
-      initialAdvancedSettings = {
+      return {
         width: a4Size.dimensions.x,
         height: a4Size.dimensions.y,
         pageWidth: a4Size.dimensions.x,
         pageHeight: a4Size.dimensions.y
       };
     }
+    return {};
+  }, [paperSizes]);
 
-    setAdvancedSettings(initialAdvancedSettings);
+  const [prevContext, setPrevContext] = useState('');
+  const currentContext = `${selectedScannerId}|${paperSizes.map(p => p.name).join(',')}`;
+
+  if (prevContext !== currentContext) {
+    setPrevContext(currentContext);
+    setAdvancedSettings(defaultAdvancedSettings);
     setSelectedFilters([]);
     setShowAdvanced(false);
+  }
 
-    if (selectedScannerId && devices.length > 0) {
-      const scanner = devices.find((s) => s.id === selectedScannerId);
-      const availablePipelines = (scanner as any)?.pipelines || ['Scan as PNG', 'Scan as PDF'];
-      setPipeline((prevPipeline) => {
-        if (!availablePipelines.includes(prevPipeline)) {
-          return availablePipelines[0];
-        }
-        return prevPipeline;
-      });
+  if (selectedScannerId && devices.length > 0) {
+    const scanner = devices.find(s => s.id === selectedScannerId);
+    const availablePipelines = scanner?.pipelines ?? ['Scan as PNG', 'Scan as PDF'];
+    if (!availablePipelines.includes(pipeline)) {
+      setPipeline(availablePipelines[0]);
     }
-  }, [selectedScannerId, devices, paperSizes]);
+  }
 
   const [scanning, setScanning] = useState(false);
   const [downloadingFile, setDownloadingFile] = useState(false);
@@ -101,57 +146,14 @@ export default function ScannerPage() {
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
   };
 
-  
-  const loadDevices = async () => {
-    try {
-      setLoadingContext(true);
-      setErrorContext(false);
-      
-      let mapping: Record<string, string> | null = null;
-      try {
-        const res = await fetch('/scannerMapping.json');
-        if (res.ok) {
-          mapping = await res.json();
-        }
-      } catch (e) {
-        console.warn('Could not load scannerMapping.json', e);
-      }
-
-      const contextData = await fetchContext();
-      let devs = contextData.devices;
-      setPaperSizes(contextData.paperSizes);
-      
-      if (mapping) {
-        devs = devs.filter((d: any) => mapping![d.id] || mapping![d.name]);
-        devs = devs.map((d: any) => ({
-          ...d,
-          name: mapping![d.id] || mapping![d.name] || d.name
-        }));
-      }
-      
-      setDevices(devs);
-      
-      if (devs.length === 1) {
-        setSelectedScannerId(devs[0].id);
-      } else if (devs.length > 0 && !devs.find(d => d.id === selectedScannerId)) {
-        setSelectedScannerId(devs[0].id);
-      }
-    } catch (err) {
-      console.error(err);
-      setErrorContext(true);
-      toast({ message: t('scanner.error') || 'Failed to load scanners', type: 'error' });
-    } finally {
-      setLoadingContext(false);
-    }
-  };
 
 
 
 
   const selectedScanner = devices.find((s) => s.id === selectedScannerId);
 
-  const features = (selectedScanner?.features as Record<string, any>) || {};
-  const settings = (selectedScanner?.settings as Record<string, any>) || {};
+  const features = (selectedScanner?.features ?? {}) as Scanner['features'];
+  const settings = (selectedScanner?.settings ?? {}) as Scanner['settings'];
   const availableFilters: string[] = settings.filters?.options || [];
   
   const resolutions = features['--resolution']?.constraint || [75, 150, 300, 600];
@@ -561,7 +563,7 @@ export default function ScannerPage() {
                   disabled={scanning}
                   title={t('scanner.format') || 'Format / Pipeline'}
                 >
-                  {((selectedScanner as any)?.pipelines || ['Scan as PNG', 'Scan as PDF']).map((p: string) => (
+                  {(selectedScanner?.pipelines ?? ['Scan as PNG', 'Scan as PDF']).map((p) => (
                     <option key={p} value={p}>
                       {p.replace('Scan as ', '')}
                     </option>
@@ -712,7 +714,7 @@ export default function ScannerPage() {
             }}
             disabled={scanning}
           >
-            {((selectedScanner as any)?.pipelines || ['Scan as PNG', 'Scan as PDF']).map((p: string) => (
+            {(selectedScanner?.pipelines ?? ['Scan as PNG', 'Scan as PDF']).map((p) => (
               <option key={p} value={p}>{p.replace('Scan as ', '')}</option>
             ))}
           </select>

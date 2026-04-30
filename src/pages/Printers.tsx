@@ -525,23 +525,23 @@ function PrinterContent() {
     }
   };
 
-  const handleOpenDocPicker = async () => {
+  const handleOpenDocPicker = () => {
     setPickerLoading(true);
-    try {
-      const files = await openDocPicker();
-      if (files.length === 0) return;
-      const url = files[0].filePath;
-      setFeishuUrl(url);
-      if (!isValidFeishuUrl(url)) {
-        setFeishuUrlError(t('printer.feishuUrlInvalid'));
-      } else {
-        setFeishuUrlError('');
-      }
-    } catch {
-      // user cancelled or API unavailable
-    } finally {
-      setPickerLoading(false);
-    }
+    openDocPicker({
+      success(files) {
+        if (files.length === 0) return;
+        const url = files[0].filePath;
+        setFeishuUrl(url);
+        if (!isValidFeishuUrl(url)) {
+          setFeishuUrlError(t('printer.feishuUrlInvalid'));
+        } else {
+          setFeishuUrlError('');
+        }
+      },
+      complete() {
+        setPickerLoading(false);
+      },
+    });
   };
 
   const handleTabSwitch = (tab: 'file' | 'feishu') => {
