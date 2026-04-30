@@ -15,10 +15,17 @@ interface DocPickerOptions {
   fail: (res: { errMsg: string }) => void;
 }
 
+interface LeaveConfirmOptions {
+  success?: (res: unknown) => void;
+  fail?: (res: { errMsg: string }) => void;
+}
+
 declare global {
   interface Window {
     tt?: {
       docsPicker?: (options: DocPickerOptions) => void;
+      enableLeaveConfirm?: (options: LeaveConfirmOptions) => void;
+      disableLeaveConfirm?: (options: LeaveConfirmOptions) => void;
     };
   }
 }
@@ -53,4 +60,12 @@ export function openDocPicker(options: {
       options.complete?.();
     },
   });
+}
+
+export function enableLeaveConfirm(): void {
+  window.tt?.enableLeaveConfirm?.({});
+}
+
+export function disableLeaveConfirm(): void {
+  window.tt?.disableLeaveConfirm?.({});
 }

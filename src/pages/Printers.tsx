@@ -10,7 +10,7 @@ import { DocumentPreview, renderPdfToImages } from '@/components/DocumentPreview
 import JobsModal from '@/components/JobsModal';
 import ImageFileList from '@/components/ImageFileList';
 import { apiErrMsg, parseGMTDate, downloadFile, imagesToPdf, createNupPdf } from '@/lib/utils';
-import { isInFeishu, openDocPicker } from '@/lib/feishu';
+import { isInFeishu, openDocPicker, enableLeaveConfirm, disableLeaveConfirm } from '@/lib/feishu';
 import { MAX_IMAGES } from '@/lib/constants';
 
 interface PrinterInfo {
@@ -597,6 +597,7 @@ function PrinterContent() {
     }
 
     setSubmitting(true);
+    if (isInFeishu()) enableLeaveConfirm();
     try {
       const { valid, error: validationError } = validatePageRange(pages, previewPageCount, true);
       if (!valid) {
@@ -723,12 +724,14 @@ function PrinterContent() {
       toast({ message: `${t('error.submit')}: ${apiErrMsg(err, fallback)}`, type: 'error' });
     } finally {
       setSubmitting(false);
+      if (isInFeishu()) disableLeaveConfirm();
     }
   };
 
   const handleContinueDuplex = async () => {
     if (!manualDuplexHook) return;
     setSubmittingDuplex(true);
+    if (isInFeishu()) enableLeaveConfirm();
     try {
       await api.post(manualDuplexHook.url);
       toast({ message: t('printer.success'), type: 'success' });
@@ -738,6 +741,7 @@ function PrinterContent() {
       toast({ message: `${t('error.submit')}: ${apiErrMsg(err, t('error.submit'))}`, type: 'error' });
     } finally {
       setSubmittingDuplex(false);
+      if (isInFeishu()) disableLeaveConfirm();
     }
   };
 

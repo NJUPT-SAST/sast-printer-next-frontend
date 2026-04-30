@@ -3,6 +3,7 @@ import { useTranslation } from '@/lib/i18n';
 import { useUi } from '@/components/ui-context';
 import { fetchContext, submitScan, downloadScanFile, getScanFiles, deleteScanFile, type Scanner, type PaperSize, type ScanFile } from '@/lib/scannerApi';
 import { downloadFile } from '@/lib/utils';
+import { isInFeishu, enableLeaveConfirm, disableLeaveConfirm } from '@/lib/feishu';
 import { Download, Loader2, Scan, RefreshCw, ChevronDown, ChevronUp, FolderOpen, X } from 'lucide-react';
 import { DocumentPreview, renderPdfToImages } from '@/components/DocumentPreview';
 
@@ -163,6 +164,7 @@ export default function ScannerPage() {
     if (!selectedScannerId) return;
     try {
       setScanning(true);
+      if (isInFeishu()) enableLeaveConfirm();
       const requestPayload = {
         params: {
           deviceId: selectedScannerId,
@@ -215,6 +217,7 @@ export default function ScannerPage() {
       setDownloadingFile(false);
     } finally {
       setScanning(false);
+      if (isInFeishu()) disableLeaveConfirm();
     }
   };
 
