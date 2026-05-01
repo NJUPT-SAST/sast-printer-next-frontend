@@ -136,7 +136,7 @@ export async function openDocPicker(options: {
       },
       fail(res) {
         const msg = res.errMsg ?? '';
-        if (msg === '' || /cancel|denied|取消|no.?perm/i.test(msg)) {
+        if (msg === '' || /cancel|denied|取消|no.?perm|internal.?error/i.test(msg)) {
           options.complete?.();
           return;
         }

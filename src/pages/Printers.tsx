@@ -63,6 +63,9 @@ function PrinterContent() {
   const [feishuUrl, setFeishuUrl] = useState('');
   const [feishuUrlError, setFeishuUrlError] = useState('');
   const [pickerLoading, setPickerLoading] = useState(false);
+  const [showDocPickerGuide, setShowDocPickerGuide] = useState(
+    () => isInFeishu() && !localStorage.getItem('feishu_doc_picker_guide_seen'),
+  );
 
   const [submitting, setSubmitting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -525,7 +528,13 @@ function PrinterContent() {
     }
   };
 
+  const dismissDocPickerGuide = () => {
+    setShowDocPickerGuide(false);
+    localStorage.setItem('feishu_doc_picker_guide_seen', '1');
+  };
+
   const handleOpenDocPicker = () => {
+    dismissDocPickerGuide();
     setPickerLoading(true);
     openDocPicker({
       success(files) {
@@ -539,7 +548,7 @@ function PrinterContent() {
         }
       },
       fail(err) {
-        if (!/(cancel|denied)/i.test(err)) {
+        if (!/(cancel|denied|internal.?error)/i.test(err)) {
           toast({ message: err, type: 'error' });
         }
       },
@@ -557,6 +566,7 @@ function PrinterContent() {
     } else {
       setFeishuUrl('');
       setFeishuUrlError('');
+      dismissDocPickerGuide();
     }
   };
 
@@ -986,6 +996,25 @@ function PrinterContent() {
                               : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
                             }`}
                         />
+                        {isInFeishu() && showDocPickerGuide && (
+                          <div
+                            className={`absolute z-10 animate-fade-in flex items-center ${feishuUrl ? 'right-20' : 'right-12'}`}
+                            style={{ top: '50%', transform: 'translateY(-50%)' }}
+                          >
+                            <div className="bg-gray-800 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap flex items-center gap-2">
+                              {t('printer.feishuDocPickerGuide')}
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); dismissDocPickerGuide(); }}
+                                className="text-gray-400 hover:text-white transition-colors"
+                                aria-label="Close"
+                              >
+                                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4.22 4.22a.75.75 0 0 1 1.06 0L8 6.94l2.72-2.72a.75.75 0 1 1 1.06 1.06L9.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L8 9.06l-2.72 2.72a.75.75 0 1 1-1.06-1.06L6.94 8 4.22 5.28a.75.75 0 0 1 0-1.06z" fill="currentColor"/></svg>
+                              </button>
+                            </div>
+                            <div className="w-0 h-0 border-t-4 border-b-4 border-l-4 border-t-transparent border-b-transparent border-l-gray-800" />
+                          </div>
+                        )}
                         {isInFeishu() && (
                           <button
                             type="button"
