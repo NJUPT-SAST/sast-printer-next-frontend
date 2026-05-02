@@ -19,14 +19,14 @@ A modern web frontend application for the **GoPrint** print service API. It prov
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) (v16 or higher recommended)
-- npm, yarn, or pnpm
+- pnpm
 
 ### Installation
 
 Install the project dependencies:
 
 ```bash
-npm install
+pnpm install
 ```
 
 ### Running the Project
@@ -37,22 +37,22 @@ To run the application locally, you have two main parts:
 
    In a separate terminal, launch the Vite development server.
    ```bash
-   npm run dev
+   pnpm dev
    ```
-   Open your browser and navigate to the local URL (typically `http://localhost:5173`).
+   Open your browser and navigate to the local URL (typically `http://localhost:3000`).
 
 ### Building for Production
 
 To create an optimized production build:
 
 ```bash
-npm run build
+pnpm build
 ```
 
 To preview the generated production build locally:
 
 ```bash
-npm run start
+pnpm start
 ```
 
 ## Environment Configuration
@@ -66,11 +66,20 @@ VITE_API_URL=http://localhost:5001
 
 In production, since the frontend is packaged and served directly by the backend server, it automatically uses the same domain and port, requiring no additional environment variable configuration for the API URL.
 
+## Testing
+
+Run tests with Vitest:
+
+```bash
+pnpm vitest run      # all tests once
+pnpm vitest           # watch mode
+```
+
 ## Project Structure
 
 - `src/components/`: Reusable UI elements (Header, Authentication, Language Switcher, etc.)
-- `src/pages/`: Main application views (Home, Printers, Jobs)
-- `src/lib/`: Utilities, API definitions (`api.ts`), and localization (`i18n.tsx`, `i18n.json`)
+- `src/pages/`: Main application views (Home, Printers, Scanner)
+- `src/lib/`: Utilities, API clients (`api.ts`, `scannerApi.ts`), PDF tools, and localization (`i18n.tsx`, `i18n.json`)
 
 ## Backend Context
 
