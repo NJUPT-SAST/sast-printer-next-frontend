@@ -1239,7 +1239,7 @@ function PrinterContent() {
           {/* Right Column */}
           <div className="w-full lg:w-1/2 flex flex-col gap-6">
             {hasDocument && (
-              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col" style={{ height: 'calc(100vh - 29rem)' }}>
+              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col h-[calc(100vh-29rem)] min-h-[400px]">
                 <div className="flex items-center justify-between mb-4 shrink-0">
                   <h2 className="text-lg font-semibold text-gray-900">{merging ? t('printer.merging') : t('printer.preview')}</h2>
                   {previewError && (
