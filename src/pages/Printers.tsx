@@ -1,9 +1,10 @@
-import { useEffect, useState, useRef, Suspense } from 'react';
+import { useEffect, useState, useRef, useMemo, useCallback, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '@/lib/api';
 import { useTranslation } from '@/lib/i18n';
 import { useUi } from '@/components/ui-context';
 import { ChevronLeft, PrinterIcon, UploadCloud, FileText, Loader2, RefreshCw, Download, ClipboardList, FolderOpen } from 'lucide-react';
+import Select from '@/components/Select';
 import { Link } from 'react-router-dom';
 import PrinterList from '@/components/PrinterList';
 import { DocumentPreview, renderPdfToImages } from '@/components/DocumentPreview';
@@ -55,57 +56,7 @@ function PrinterContent() {
   const [collate, setCollate] = useState('true');
   const [pageSet, setPageSet] = useState('all');
   const [pages, setPages] = useState('');
-  const [pagesError, setPagesError] = useState('');
-  const [nup, setNup] = useState<1 | 2 | 4 | 6>(1);
-  const [nupDirection, setNupDirection] = useState<'horizontal' | 'vertical'>('horizontal');
-
-  const [sourceTab, setSourceTab] = useState<'file' | 'feishu'>('file');
-  const [feishuUrl, setFeishuUrl] = useState('');
-  const [feishuUrlError, setFeishuUrlError] = useState('');
-  const [pickerLoading, setPickerLoading] = useState(false);
-  const [showDocPickerGuide, setShowDocPickerGuide] = useState(
-    () => isInFeishu() && !localStorage.getItem('feishu_doc_picker_guide_seen'),
-  );
-
-  const [submitting, setSubmitting] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [merging, setMerging] = useState(false);
-  const [isJobsModalOpen, setIsJobsModalOpen] = useState(false);
-  const [manualDuplexHook, setManualDuplexHook] = useState<{ url: string, expiresAt: string } | null>(null);
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
-  const [submittingDuplex, setSubmittingDuplex] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const dragCounter = useRef(0);
-
-  const acceptValue = supportedFileTypes.map((ext) => `.${ext}`).join(',');
-  const supportedTypesText = supportedFileTypes.map((ext) => `.${ext}`).join(', ');
-
-  const getFileExtension = (fileName: string) => {
-    const parts = fileName.split('.');
-    if (parts.length <= 1) return '';
-    return parts[parts.length - 1].toLowerCase();
-  };
-
-  const isSupportedFile = (targetFile: File) => {
-    const ext = getFileExtension(targetFile.name);
-    return supportedFileTypes.includes(ext);
-  };
-
-  const FEISHU_URL_RE = /^https:\/\/[^/]+\.feishu\.cn\/(docx|doc|sheets|bitable|mindnotes|wiki)\/[A-Za-z0-9_-]{27}([?#].*)?$/;
-  const isValidFeishuUrl = (url: string) => FEISHU_URL_RE.test(url.trim());
-
-  const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']);
-  const isImageFile = (f: File) => IMAGE_EXTS.has(getFileExtension(f.name));
-
-  const rejectUnsupportedFile = () => {
-    toast({
-      message: t('printer.unsupportedFileType', { types: supportedTypesText }),
-      type: 'error',
-    });
-  };
-
-  const validatePageRange = (input: string, maxPage?: number | null, strictBounds = false) => {
+  const validatePageRange = useCallback((input: string, maxPage?: number | null, strictBounds = false) => {
     if (!input.trim()) {
       return { valid: true, error: '' };
     }
@@ -170,6 +121,56 @@ function PrinterContent() {
     }
 
     return { valid: true, error: '' };
+  }, [t]);
+
+  const pagesError = useMemo(() => validatePageRange(pages, previewPageCount).error, [pages, previewPageCount, validatePageRange]);
+  const [nup, setNup] = useState<1 | 2 | 4 | 6>(1);
+  const [nupDirection, setNupDirection] = useState<'horizontal' | 'vertical'>('horizontal');
+
+  const [sourceTab, setSourceTab] = useState<'file' | 'feishu'>('file');
+  const [feishuUrl, setFeishuUrl] = useState('');
+  const [feishuUrlError, setFeishuUrlError] = useState('');
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [showDocPickerGuide, setShowDocPickerGuide] = useState(
+    () => isInFeishu() && !localStorage.getItem('feishu_doc_picker_guide_seen'),
+  );
+
+  const [submitting, setSubmitting] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [merging, setMerging] = useState(false);
+  const [isJobsModalOpen, setIsJobsModalOpen] = useState(false);
+  const [manualDuplexHook, setManualDuplexHook] = useState<{ url: string, expiresAt: string } | null>(null);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [submittingDuplex, setSubmittingDuplex] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragCounter = useRef(0);
+
+  const acceptValue = supportedFileTypes.map((ext) => `.${ext}`).join(',');
+  const supportedTypesText = supportedFileTypes.map((ext) => `.${ext}`).join(', ');
+
+  const getFileExtension = (fileName: string) => {
+    const parts = fileName.split('.');
+    if (parts.length <= 1) return '';
+    return parts[parts.length - 1].toLowerCase();
+  };
+
+  const isSupportedFile = (targetFile: File) => {
+    const ext = getFileExtension(targetFile.name);
+    return supportedFileTypes.includes(ext);
+  };
+
+  const FEISHU_URL_RE = /^https:\/\/[^/]+\.feishu\.cn\/(docx|doc|sheets|bitable|mindnotes|wiki)\/[A-Za-z0-9_-]{27}([?#].*)?$/;
+  const isValidFeishuUrl = (url: string) => FEISHU_URL_RE.test(url.trim());
+
+  const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']);
+  const isImageFile = (f: File) => IMAGE_EXTS.has(getFileExtension(f.name));
+
+  const rejectUnsupportedFile = () => {
+    toast({
+      message: t('printer.unsupportedFileType', { types: supportedTypesText }),
+      type: 'error',
+    });
   };
 
   const getSelectedPageCount = (input: string, maxPage?: number | null) => {
@@ -246,7 +247,7 @@ function PrinterContent() {
   };
 
   useEffect(() => {
-    setIsJobsModalOpen(false);
+    setIsJobsModalOpen(false); // eslint-disable-line react-hooks/set-state-in-effect -- close modal on printer switch
   }, [id]);
 
   useEffect(() => {
@@ -263,7 +264,7 @@ function PrinterContent() {
       const interval = setInterval(updateTimer, 1000);
       return () => clearInterval(interval);
     } else {
-      setTimeLeft(null);
+      setTimeLeft(null); // eslint-disable-line react-hooks/set-state-in-effect -- reset derived timer
     }
   }, [manualDuplexHook]);
 
@@ -271,7 +272,7 @@ function PrinterContent() {
 
   useEffect(() => {
     if (!hasDocument) {
-      setPreviewLoading(false);
+      setPreviewLoading(false); // eslint-disable-line react-hooks/set-state-in-effect -- reset preview state when document removed
       setPreviewError(null);
       setPreviewPageCount(null);
       setPreviewPdfUrl((oldUrl) => {
@@ -389,13 +390,8 @@ function PrinterContent() {
   }, [imageFiles, toast, t]);
 
   useEffect(() => {
-    const { error: rangeError } = validatePageRange(pages, previewPageCount);
-    setPagesError(rangeError);
-  }, [pages, previewPageCount]);
-
-  useEffect(() => {
     if (isDuplexDisabled && duplex === 'true') {
-      setDuplex('off');
+      setDuplex('off'); // eslint-disable-line react-hooks/set-state-in-effect -- auto-correct duplex for single page
     }
   }, [duplex, isDuplexDisabled]);
 
@@ -407,7 +403,7 @@ function PrinterContent() {
 
   useEffect(() => {
     if (isNupDisabled && nup !== 1) {
-      setNup(1);
+      setNup(1); // eslint-disable-line react-hooks/set-state-in-effect -- auto-correct nup for single page
     }
   }, [isNupDisabled, nup]);
 
@@ -1074,27 +1070,29 @@ function PrinterContent() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.collate')}</label>
-                  <select
+                  <Select
+                    options={[
+                      { value: 'true', label: `${t('printer.yes')} (1,2,3...1,2,3)` },
+                      { value: 'false', label: `${t('printer.no')} (1,1...2,2...)` },
+                    ]}
                     value={collate}
-                    onChange={(e) => setCollate(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white transition-shadow appearance-none"
-                  >
-                    <option value="true">{t('printer.yes')} (1,2,3...1,2,3)</option>
-                    <option value="false">{t('printer.no')} (1,1...2,2...)</option>
-                  </select>
+                    onChange={setCollate}
+                    className="w-full px-4 py-2.5 rounded-xl"
+                  />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.pageSet') || 'Page Set'}</label>
-                  <select
+                  <Select
+                    options={[
+                      { value: 'all', label: t('printer.pageSetAll') || 'All Pages' },
+                      { value: 'odd', label: t('printer.pageSetOdd') || 'Odd Pages' },
+                      { value: 'even', label: t('printer.pageSetEven') || 'Even Pages' },
+                    ]}
                     value={pageSet}
-                    onChange={(e) => setPageSet(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white transition-shadow appearance-none"
-                  >
-                    <option value="all">{t('printer.pageSetAll') || 'All Pages'}</option>
-                    <option value="odd">{t('printer.pageSetOdd') || 'Odd Pages'}</option>
-                    <option value="even">{t('printer.pageSetEven') || 'Even Pages'}</option>
-                  </select>
+                    onChange={setPageSet}
+                    className="w-full px-4 py-2.5 rounded-xl"
+                  />
                 </div>
               </div>
 
@@ -1197,9 +1195,9 @@ function PrinterContent() {
               )}
 
               <div className="mt-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t('common.duplex')}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('common.duplex')} <span className="text-red-500">*</span></label>
                 <div className="flex gap-4">
-                  <label className="flex-1 w-full flex items-center p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
+                  <label className={`flex-1 flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${duplex === 'off' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
                     <input
                       type="radio"
                       name="duplex"
@@ -1211,7 +1209,7 @@ function PrinterContent() {
                     <span className="ml-3 block text-sm font-medium text-gray-900">{t('printer.simplex')}</span>
                   </label>
 
-                  <label className={`flex-1 w-full flex items-center p-3 border border-gray-200 rounded-xl cursor-pointer transition-colors ${printer?.duplex_mode === 'off' || isDuplexDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}>
+                  <label className={`flex-1 flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${duplex === 'true' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'} ${printer?.duplex_mode === 'off' || isDuplexDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
                     <input
                       type="radio"
                       name="duplex"

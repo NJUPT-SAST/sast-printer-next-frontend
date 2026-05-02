@@ -35,7 +35,7 @@ export default function PrinterList({ onJobsClick }: { onJobsClick?: () => void 
     };
 
     fetchPrinters();
-  }, []);
+  }, [t]);
 
   const getStatusColor = (status: string) => {
     switch (status) {

@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -53,12 +53,10 @@ function SortableRow({
   const replaceInputRef = useRef<HTMLInputElement>(null);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 };
-  const [thumbnailUrl, setThumbnailUrl] = useState('');
+  const thumbnailUrl = useMemo(() => URL.createObjectURL(file), [file]);
   useEffect(() => {
-    const url = URL.createObjectURL(file);
-    setThumbnailUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
+    return () => URL.revokeObjectURL(thumbnailUrl);
+  }, [thumbnailUrl]);
 
   const isReplaceTarget = dropTarget?.type === 'replace' && dropTarget.index === index;
   const isInsertTarget = dropTarget?.type === 'insert-before' && dropTarget.index === index;
@@ -148,6 +146,8 @@ function SortableRow({
   );
 }
 
+const fileIdCache = new WeakMap<File, string>();
+
 export default function ImageFileList({ files, onReorder, onReplace, onDelete, onAdd, limitReached, allowDocReplace }: ImageFileListProps) {
   const { t } = useTranslation();
   const { toast } = useUi();
@@ -156,14 +156,12 @@ export default function ImageFileList({ files, onReorder, onReplace, onDelete, o
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  // Stable IDs that don't change when files are reordered
-  const idMapRef = useRef<WeakMap<File, string>>(new WeakMap());
-  const ids = files.map((file) => {
-    if (!idMapRef.current.has(file)) {
-      idMapRef.current.set(file, crypto.randomUUID());
+  const ids = useMemo(() => files.map((file) => {
+    if (!fileIdCache.has(file)) {
+      fileIdCache.set(file, crypto.randomUUID());
     }
-    return idMapRef.current.get(file)!;
-  });
+    return fileIdCache.get(file)!;
+  }), [files]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -213,7 +211,7 @@ export default function ImageFileList({ files, onReorder, onReplace, onDelete, o
       next.splice(index, 0, ...toInsert);
       onReorder(next);
     }
-  }, [files, onReplace, onReorder, toast, t, allowDocReplace]);
+  }, [files, onReplace, onReorder, toast, t]);
 
   const handleAddZoneDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();

@@ -29,33 +29,10 @@ export default function JobsModal({ onClose }: JobsModalProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
   const [manualDuplexHook, setManualDuplexHook] = useState<{ url: string, expiresAt: string } | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [submittingDuplex, setSubmittingDuplex] = useState(false);
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    if (manualDuplexHook?.expiresAt) {
-      const updateTimer = () => {
-        const remaining = Math.max(0, parseGMTDate(manualDuplexHook.expiresAt).getTime() - Date.now());
-        setTimeLeft(remaining);
-        if (remaining === 0) {
-          setManualDuplexHook(null);
-          fetchJobs(true);
-        }
-      };
-      updateTimer();
-      const interval = setInterval(updateTimer, 1000);
-      return () => clearInterval(interval);
-    } else {
-      setTimeLeft(null);
-    }
-  }, [manualDuplexHook]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchJobs = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -75,6 +52,30 @@ export default function JobsModal({ onClose }: JobsModalProps) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (manualDuplexHook?.expiresAt) {
+      const updateTimer = () => {
+        const remaining = Math.max(0, parseGMTDate(manualDuplexHook.expiresAt).getTime() - Date.now());
+        setTimeLeft(remaining);
+        if (remaining === 0) {
+          setManualDuplexHook(null);
+          fetchJobs(true);
+        }
+      };
+      updateTimer();
+      const interval = setInterval(updateTimer, 1000);
+      return () => clearInterval(interval);
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting derived state
+    setTimeLeft(null);
+  }, [manualDuplexHook, fetchJobs]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch
     fetchJobs();
     const id = setInterval(() => fetchJobs(true), 8000);
     return () => clearInterval(id);

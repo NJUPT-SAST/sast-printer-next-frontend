@@ -6,6 +6,7 @@ import { downloadFile } from '@/lib/utils';
 import { isInFeishu, enableLeaveConfirm, disableLeaveConfirm } from '@/lib/feishu';
 import { Download, Loader2, Scan, RefreshCw, ChevronDown, ChevronUp, FolderOpen, X } from 'lucide-react';
 import { DocumentPreview, renderPdfToImages } from '@/components/DocumentPreview';
+import Select from '@/components/Select';
 
 export default function ScannerPage() {
   const { t, locale } = useTranslation();
@@ -301,7 +302,7 @@ export default function ScannerPage() {
               {/* Device Selection */}
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-gray-700">{t('scanner.device')}</label>
+                  <label className="text-sm font-medium text-gray-700">{t('scanner.device')} <span className="text-red-500">*</span></label>
                   <button 
                     onClick={loadDevices} 
                     disabled={loadingContext || scanning}
@@ -311,55 +312,47 @@ export default function ScannerPage() {
                     <RefreshCw className={`w-4 h-4 ${loadingContext ? 'animate-spin' : ''}`} />
                   </button>
                 </div>
-                <select
-                  className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                <Select
+                  options={devices.map((s) => ({
+                    value: s.id,
+                    label: `${s.name}${s.model ? ` (${s.model})` : ''}`,
+                  }))}
                   value={selectedScannerId}
-                  onChange={(e) => setSelectedScannerId(e.target.value)}
+                  onChange={setSelectedScannerId}
+                  placeholder={t('scanner.selectDevice') || 'Select a scanner'}
                   disabled={scanning}
-                >
-                  <option value="" disabled>
-                    {t('scanner.selectDevice') || 'Select a scanner'}
-                  </option>
-                  {devices.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} {s.model ? `(${s.model})` : ''}
-                    </option>
-                  ))}
-                </select>
+                  className="w-full p-2 rounded-lg"
+                />
               </div>
 
               {/* Resolution Selection */}
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium text-gray-700">{t('scanner.resolution')}</label>
-                <select
-                  className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                <Select
+                  options={resolutions.map((res: number | string) => ({
+                    value: res.toString(),
+                    label: `${res} dpi`,
+                  }))}
                   value={resolution}
-                  onChange={(e) => setResolution(e.target.value)}
+                  onChange={setResolution}
                   disabled={scanning}
-                >
-                  {resolutions.map((res: number | string) => (
-                    <option key={res} value={res.toString()}>
-                      {res} dpi
-                    </option>
-                  ))}
-                </select>
+                  className="w-full p-2 rounded-lg"
+                />
               </div>
 
               {/* Color Mode Selection */}
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium text-gray-700">{t('scanner.colorMode')}</label>
-                <select
-                  className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                <Select
+                  options={colorModes.map((mode: string) => ({
+                    value: mode,
+                    label: mode,
+                  }))}
                   value={colorMode}
-                  onChange={(e) => setColorMode(e.target.value)}
+                  onChange={setColorMode}
                   disabled={scanning}
-                >
-                  {colorModes.map((mode: string) => (
-                    <option key={mode} value={mode}>
-                      {mode}
-                    </option>
-                  ))}
-                </select>
+                  className="w-full p-2 rounded-lg"
+                />
               </div>
 
               {/* Action Button */}
@@ -380,27 +373,37 @@ export default function ScannerPage() {
                       {features['--source'] && (
                         <div className="flex flex-col gap-2">
                           <label className="text-sm text-gray-600">{t('scanner.source') || 'Source'}</label>
-                          <select
-                            className="p-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          <Select
+                            options={(features['--source'].options ?? []).map((opt: string) => ({
+                              value: opt,
+                              label: opt,
+                            }))}
                             value={advancedSettings['source'] ?? features['--source'].default ?? ''}
-                            onChange={(e) => setAdvancedSettings({...advancedSettings, source: e.target.value})}
+                            onChange={(v) => setAdvancedSettings({ ...advancedSettings, source: v })}
                             disabled={scanning}
-                          >
-                            {features['--source'].options?.map((opt: string) => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                          </select>
+                            className="w-full p-2 rounded-lg text-sm"
+                          />
                         </div>
                       )}
                       
                       {paperSizes.length > 0 && (features['-x'] || features['-y']) && (
                         <div className="flex flex-col gap-2">
                           <label className="text-sm text-gray-600">{t('scanner.paperSize') || 'Paper Size'}</label>
-                          <select
-                            className="p-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            value={advancedSettings.width && advancedSettings.height ? `${advancedSettings.width},${advancedSettings.height}` : ''}
-                            onChange={(e) => {
-                              if (e.target.value === '') {
+                          <Select
+                            options={[
+                              { value: '', label: t('scanner.customSize') || 'Custom / Select size...' },
+                              ...paperSizes.map((ps) => ({
+                                value: `${ps.dimensions.x},${ps.dimensions.y}`,
+                                label: `${ps.name.replace(/\(.*\)/, '').trim()} (${ps.dimensions.x}x${ps.dimensions.y}mm)`,
+                              })),
+                            ]}
+                            value={
+                              advancedSettings.width && advancedSettings.height
+                                ? `${advancedSettings.width},${advancedSettings.height}`
+                                : ''
+                            }
+                            onChange={(v) => {
+                              if (v === '') {
                                 const newSettings = { ...advancedSettings };
                                 delete newSettings.width;
                                 delete newSettings.height;
@@ -409,24 +412,18 @@ export default function ScannerPage() {
                                 setAdvancedSettings(newSettings);
                                 return;
                               }
-                              const [w, h] = e.target.value.split(',').map(Number);
+                              const [w, h] = v.split(',').map(Number);
                               setAdvancedSettings({
-                                ...advancedSettings, 
-                                width: w, 
+                                ...advancedSettings,
+                                width: w,
                                 height: h,
                                 pageWidth: w,
-                                pageHeight: h
+                                pageHeight: h,
                               });
                             }}
                             disabled={scanning}
-                          >
-                            <option value="">{t('scanner.customSize') || 'Custom / Select size...'}</option>
-                            {paperSizes.map((ps) => (
-                              <option key={ps.name} value={`${ps.dimensions.x},${ps.dimensions.y}`}>
-                                {ps.name.replace(/\(.*\)/, '').trim()} ({ps.dimensions.x}x{ps.dimensions.y}mm)
-                              </option>
-                            ))}
-                          </select>
+                            className="w-full p-2 rounded-lg text-sm"
+                          />
                         </div>
                       )}
 
@@ -555,23 +552,19 @@ export default function ScannerPage() {
 
               {/* Action Area: Format + Scan Button — desktop only inside sidebar */}
               <div className="hidden lg:flex mt-auto pt-4 border-t border-gray-200 items-center gap-3">
-                <select
-                  className="p-3 w-[120px] sm:w-[140px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white font-medium text-sm text-gray-700"
+                <Select
+                  options={(selectedScanner?.pipelines ?? ['Scan as PNG', 'Scan as PDF']).map((p) => ({
+                    value: p,
+                    label: p.replace('Scan as ', ''),
+                  }))}
                   value={pipeline}
-                  onChange={(e) => {
-                    const newFormat = e.target.value;
-                    setPipeline(newFormat);
-                    localStorage.setItem('scanner_last_pipeline', newFormat);
+                  onChange={(v) => {
+                    setPipeline(v);
+                    localStorage.setItem('scanner_last_pipeline', v);
                   }}
                   disabled={scanning}
-                  title={t('scanner.format') || 'Format / Pipeline'}
-                >
-                  {(selectedScanner?.pipelines ?? ['Scan as PNG', 'Scan as PDF']).map((p) => (
-                    <option key={p} value={p}>
-                      {p.replace('Scan as ', '')}
-                    </option>
-                  ))}
-                </select>
+                  className="p-3 w-[120px] sm:w-[140px] rounded-lg text-sm font-medium text-gray-700"
+                />
 
                 <button
                   onClick={handleScan}
@@ -707,20 +700,19 @@ export default function ScannerPage() {
       {/* Mobile floating scan button */}
       {!loadingContext && !errorContext && devices.length > 0 && (
         <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 p-4 bg-white border-t border-gray-200 shadow-lg flex items-center gap-3">
-          <select
-            className="p-3 w-[120px] border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white font-medium text-sm text-gray-700"
+          <Select
+            options={(selectedScanner?.pipelines ?? ['Scan as PNG', 'Scan as PDF']).map((p) => ({
+              value: p,
+              label: p.replace('Scan as ', ''),
+            }))}
             value={pipeline}
-            onChange={(e) => {
-              const newFormat = e.target.value;
-              setPipeline(newFormat);
-              localStorage.setItem('scanner_last_pipeline', newFormat);
+            onChange={(v) => {
+              setPipeline(v);
+              localStorage.setItem('scanner_last_pipeline', v);
             }}
             disabled={scanning}
-          >
-            {(selectedScanner?.pipelines ?? ['Scan as PNG', 'Scan as PDF']).map((p) => (
-              <option key={p} value={p}>{p.replace('Scan as ', '')}</option>
-            ))}
-          </select>
+            className="p-3 w-[120px] rounded-lg text-sm font-medium text-gray-700"
+          />
           <button
             onClick={handleScan}
             disabled={scanning || !selectedScannerId}

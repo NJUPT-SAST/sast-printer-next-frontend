@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterEach, afterAll, vi } from 'vitest';
 import MockAdapter from 'axios-mock-adapter';
-import scannerApi, { fetchContext, submitScan, getScanFiles, deleteScanFile } from './scannerApi';
+import scannerApi, { fetchContext, submitScan, getScanFiles, deleteScanFile, type ScanRequest } from './scannerApi';
 
 describe('scannerApi', () => {
   let mock: MockAdapter;
@@ -43,7 +43,7 @@ describe('scannerApi', () => {
     const mockData = { jobId: '123' };
     mock.onPost(/\/scan\?_t=\d+/).reply(200, mockData);
 
-    const data = await submitScan(request as any);
+    const data = await submitScan(request as ScanRequest);
     expect(data).toEqual(mockData);
     expect(mock.history.post[0].url).toMatch(/\/scan\?_t=\d+/);
     expect(JSON.parse(mock.history.post[0].data)).toEqual(request);

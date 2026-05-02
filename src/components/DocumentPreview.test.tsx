@@ -5,7 +5,7 @@ import { DocumentPreview } from './DocumentPreview';
 import '@testing-library/jest-dom/vitest';
 
 vi.mock('@/lib/i18n', () => ({
-  useTranslation: () => ({ t: (key: string, values?: any) => key + (values ? JSON.stringify(values) : '') })
+  useTranslation: () => ({ t: (key: string, values?: Record<string, unknown>) => key + (values ? JSON.stringify(values) : '') })
 }));
 
 afterEach(() => {
