@@ -286,7 +286,7 @@ export default function ScannerPage() {
 
       <div className={`flex flex-col lg:flex-row gap-6 items-stretch flex-1 ${imageUrl ? 'min-h-0' : ''}`}>
         {/* Sidebar Settings */}
-        <div className={`w-full lg:w-80 flex flex-col gap-6 bg-white p-6 rounded-xl shadow-sm border border-gray-100 ${imageUrl ? 'overflow-y-auto' : ''}`}>
+        <div className={`w-full lg:w-80 flex flex-col gap-6 bg-white p-6 rounded-2xl shadow-sm border border-gray-200 ${imageUrl ? 'overflow-y-auto' : ''}`}>
           
           {loadingContext ? (
             <div className="flex items-center gap-2 text-gray-500">
