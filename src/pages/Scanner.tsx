@@ -4,7 +4,7 @@ import { useUi } from '@/components/ui-context';
 import { fetchContext, submitScan, downloadScanFile, getScanFiles, deleteScanFile, type Scanner, type PaperSize, type ScanFile } from '@/lib/scannerApi';
 import { downloadFile } from '@/lib/utils';
 import { isInFeishu, enableLeaveConfirm, disableLeaveConfirm } from '@/lib/feishu';
-import { Download, Loader2, Scan, RefreshCw, ChevronDown, ChevronUp, FolderOpen, X } from 'lucide-react';
+import { Download, Loader2, Scan, RefreshCw, ChevronDown, ChevronUp, FolderOpen, X, Settings } from 'lucide-react';
 import { DocumentPreview, renderPdfToImages } from '@/components/DocumentPreview';
 import Select from '@/components/Select';
 
@@ -287,7 +287,8 @@ export default function ScannerPage() {
       <div className={`flex flex-col lg:flex-row gap-6 items-stretch flex-1 ${imageUrl ? 'min-h-0' : ''}`}>
         {/* Sidebar Settings */}
         <div className={`w-full lg:w-80 flex flex-col gap-6 bg-white p-6 rounded-2xl shadow-sm border border-gray-200 ${imageUrl ? 'overflow-y-auto' : ''}`}>
-          
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2"><Settings className="w-5 h-5 text-gray-400" />{t('scanner.settingsTitle')}</h2>
+
           {loadingContext ? (
             <div className="flex items-center gap-2 text-gray-500">
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -580,56 +581,56 @@ export default function ScannerPage() {
         </div>
 
         {/* Preview Area */}
-        <div className={`flex-1 flex flex-col gap-6 ${imageUrl ? 'min-h-0' : ''}`}>
-          <div className={`flex-1 flex flex-col bg-gray-50 rounded-xl border border-gray-200 overflow-hidden relative ${imageUrl ? 'min-h-0' : 'min-h-[400px]'}`}>
-            <div className="p-4 border-b border-gray-200 bg-white flex justify-between items-center shrink-0">
-              <h2 className="font-medium text-gray-800 flex items-center gap-2">
-                <Scan className="w-4 h-4 text-gray-500" />
-                {t('scanner.preview')}
-              </h2>
+        <div className={`flex-1 flex flex-col min-h-0 ${!imageUrl ? 'hidden lg:flex' : ''}`}>
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col flex-1 min-h-[400px] overflow-hidden">
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2"><Scan className="w-5 h-5 text-gray-400" />{t('scanner.preview')}</h2>
               {imageUrl && (
                 <button
                   onClick={handleDownload}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                  aria-label={t('scanner.download')}
+                  title={t('scanner.download')}
                 >
-                  <Download className="w-4 h-4" />
-                  {t('scanner.download')}
+                  <Download className="h-4 w-4" />
                 </button>
               )}
             </div>
             
-            <div className="flex-1 p-6 overflow-hidden flex flex-col">
-              {scanning && !downloadingFile ? (
-                <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-gray-400">
-                  <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-                  <p className="animate-pulse">{t('scanner.scanning')}</p>
+            {scanning && !downloadingFile ? (
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 text-gray-400">
+                <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                <p className="animate-pulse">{t('scanner.scanning')}</p>
+              </div>
+            ) : downloadingFile ? (
+              <div className="flex-1 flex flex-col items-center justify-center gap-4 text-gray-600">
+                <Download className="w-12 h-12 text-blue-500 animate-bounce" />
+                <div className="w-full max-w-sm bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                  <div
+                    className="bg-blue-600 h-2.5 rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${Math.min(100, Math.max(0, downloadProgress))}%` }}
+                  ></div>
                 </div>
-              ) : downloadingFile ? (
-                <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-gray-600">
-                  <Download className="w-12 h-12 text-blue-500 animate-bounce" />
-                  <div className="w-full max-w-sm bg-gray-200 rounded-full h-2.5 overflow-hidden">
-                    <div 
-                      className="bg-blue-600 h-2.5 rounded-full transition-all duration-300 ease-out" 
-                      style={{ width: `${Math.min(100, Math.max(0, downloadProgress))}%` }}
-                    ></div>
-                  </div>
-                  <div className="flex justify-between w-full max-w-sm text-sm font-medium">
-                    <span>{t('scanner.downloading') || 'Downloading preview...'}</span>
-                    <span>{downloadProgress}% ({formatBytes(downloadLoaded)} / {downloadTotal > 0 ? formatBytes(downloadTotal) : '?'})</span>
-                  </div>
+                <div className="flex justify-between w-full max-w-sm text-sm font-medium">
+                  <span>{t('scanner.downloading') || 'Downloading preview...'}</span>
+                  <span>{downloadProgress}% ({formatBytes(downloadLoaded)} / {downloadTotal > 0 ? formatBytes(downloadTotal) : '?'})</span>
                 </div>
-              ) : imageUrl ? (
-                <DocumentPreview
-                  images={previewImages}
-                  fallbackNode={<object data={imageUrl} type="application/pdf" className="w-full h-full rounded-lg shadow-md border border-gray-200"></object>}
-                />
-              ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 gap-2">
-                  <Scan className="w-12 h-12 opacity-20" />
-                  <p>{t('scanner.noPreview')}</p>
-                </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <DocumentPreview
+                images={previewImages}
+                fallbackNode={
+                  imageUrl ? (
+                    <object data={imageUrl} type="application/pdf" className="w-full h-full rounded-lg shadow-md border border-gray-200"></object>
+                  ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-2">
+                      <Scan className="w-12 h-12 opacity-20" />
+                      <p>{t('scanner.noPreview')}</p>
+                    </div>
+                  )
+                }
+              />
+            )}
           </div>
         </div>
       </div>

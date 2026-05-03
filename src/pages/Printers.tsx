@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '@/lib/api';
 import { useTranslation } from '@/lib/i18n';
 import { useUi } from '@/components/ui-context';
-import { ChevronLeft, PrinterIcon, UploadCloud, FileText, Loader2, RefreshCw, Download, ClipboardList, FolderOpen } from 'lucide-react';
+import { ChevronLeft, PrinterIcon, UploadCloud, FileText, Loader2, RefreshCw, Download, ClipboardList, FolderOpen, Settings, Upload, ArrowLeftRight, ArrowUpDown } from 'lucide-react';
 import Select from '@/components/Select';
 import { Link } from 'react-router-dom';
 import PrinterList from '@/components/PrinterList';
@@ -894,28 +894,30 @@ function PrinterContent() {
         <form id="print-form" onSubmit={handleSubmit} className="flex flex-col lg:flex-row gap-6 items-start">
           <div className="w-full lg:w-1/2 flex flex-col">
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4 shrink-0">{t('printer.document')}</h2>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 shrink-0 flex items-center gap-2"><Settings className="w-5 h-5 text-gray-400" />{t('printer.document')}</h2>
 
               <div className="flex flex-col flex-1 min-h-0">
                 <div className="flex border-b border-gray-200 mb-4 shrink-0">
                   <button
                     type="button"
                     onClick={() => handleTabSwitch('file')}
-                    className={`flex-1 py-2.5 text-sm font-medium text-center border-b-2 transition-colors ${sourceTab === 'file'
+                    className={`flex-1 py-2.5 text-sm font-medium text-center border-b-2 transition-colors flex items-center justify-center gap-1.5 ${sourceTab === 'file'
                         ? 'border-blue-600 text-blue-600'
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                       }`}
                   >
+                    <Upload className="w-4 h-4" />
                     {t('printer.tabUploadFile')}
                   </button>
                   <button
                     type="button"
                     onClick={() => handleTabSwitch('feishu')}
-                    className={`flex-1 py-2.5 text-sm font-medium text-center border-b-2 transition-colors ${sourceTab === 'feishu'
+                    className={`flex-1 py-2.5 text-sm font-medium text-center border-b-2 transition-colors flex items-center justify-center gap-1.5 ${sourceTab === 'feishu'
                         ? 'border-blue-600 text-blue-600'
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                       }`}
                   >
+                    <span className="w-4 h-4 bg-current [mask-image:url(/feishu-logo.svg)] [mask-size:contain] [mask-repeat:no-repeat] [mask-position:center]" />
                     {t('printer.tabFeishu')}
                   </button>
                 </div>
@@ -1177,7 +1179,8 @@ function PrinterContent() {
                         onChange={() => setNupDirection('horizontal')}
                         className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                       />
-                      <span className="ml-3 text-sm font-medium text-gray-900">{t('printer.nupHorizontal')}</span>
+                      <ArrowLeftRight className="w-4 h-4 ml-2 text-gray-400" />
+                      <span className="ml-2 text-sm font-medium text-gray-900">{t('printer.nupHorizontal')}</span>
                     </label>
                     <label className={`flex-1 flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${nupDirection === 'vertical' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
                       <input
@@ -1188,7 +1191,8 @@ function PrinterContent() {
                         onChange={() => setNupDirection('vertical')}
                         className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                       />
-                      <span className="ml-3 text-sm font-medium text-gray-900">{t('printer.nupVertical')}</span>
+                      <ArrowUpDown className="w-4 h-4 ml-2 text-gray-400" />
+                      <span className="ml-2 text-sm font-medium text-gray-900">{t('printer.nupVertical')}</span>
                     </label>
                   </div>
                 </div>
@@ -1231,62 +1235,68 @@ function PrinterContent() {
                   </p>
                 )}
               </div>
+
+              <div className="hidden lg:block mt-auto">
+                <div className="mt-6 pt-4 border-t border-gray-200">
+                  <button
+                    type="submit"
+                    disabled={submitBtnDisabled}
+                    className={submitBtnClass}
+                  >
+                    {submitBtnContent}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Right Column */}
-          <div className="w-full lg:w-1/2 flex flex-col gap-6">
-            {hasDocument && (
-              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col h-[calc(100vh-29rem)] min-h-[400px]">
-                <div className="flex items-center justify-between mb-4 shrink-0">
-                  <h2 className="text-lg font-semibold text-gray-900">{merging ? t('printer.merging') : t('printer.preview')}</h2>
-                  {previewError && (
-                    <button
-                      type="button"
-                      onClick={() => setPreviewVersion((v) => v + 1)}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                      aria-label={t('printer.retryPreview')}
-                      title={t('printer.retryPreview')}
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                    </button>
-                  )}
-                  {!previewError && previewPdfUrl && !previewLoading && (
-                    <button
-                      type="button"
-                      onClick={handleDownloadPreview}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                      aria-label={t('printer.downloadFile')}
-                      title={t('printer.downloadFile')}
-                    >
-                      <Download className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-
-                <DocumentPreview
-                  images={(() => {
-                    const sel = getSelectedPages();
-                    if (!sel) return previewImages;
-                    return sel.map((p) => previewImages[p - 1]).filter(Boolean);
-                  })()}
-                  loading={previewLoading || merging}
-                  error={previewError}
-                  nup={nup === 1 ? undefined : nup}
-                  nupDirection={nupDirection}
-                  pageDimensions={pageDimensions}
-                />
+          <div className={`w-full lg:w-1/2 flex flex-col ${!hasDocument ? 'hidden lg:flex' : ''}`}>
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col h-[calc(100vh-21rem)] min-h-[400px] overflow-hidden">
+              <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2"><FileText className="w-5 h-5 text-gray-400" />{merging ? t('printer.merging') : t('printer.preview')}</h2>
+                {hasDocument && previewError && (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewVersion((v) => v + 1)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                    aria-label={t('printer.retryPreview')}
+                    title={t('printer.retryPreview')}
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </button>
+                )}
+                {hasDocument && !previewError && previewPdfUrl && !previewLoading && (
+                  <button
+                    type="button"
+                    onClick={handleDownloadPreview}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                    aria-label={t('printer.downloadFile')}
+                    title={t('printer.downloadFile')}
+                  >
+                    <Download className="h-4 w-4" />
+                  </button>
+                )}
               </div>
-            )}
 
-            <div className="hidden lg:block bg-white p-6 rounded-2xl border border-gray-200 shadow-sm shrink-0">
-              <button
-                type="submit"
-                disabled={submitBtnDisabled}
-                className={submitBtnClass}
-              >
-                {submitBtnContent}
-              </button>
+              <DocumentPreview
+                images={hasDocument ? (() => {
+                  const sel = getSelectedPages();
+                  if (!sel) return previewImages;
+                  return sel.map((p) => previewImages[p - 1]).filter(Boolean);
+                })() : []}
+                loading={previewLoading || merging}
+                error={previewError}
+                nup={nup === 1 ? undefined : nup}
+                nupDirection={nupDirection}
+                pageDimensions={pageDimensions}
+                fallbackNode={
+                  <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-2">
+                    <FileText className="w-12 h-12 opacity-20" />
+                    <p className="text-sm">{t('printer.previewEmpty')}</p>
+                  </div>
+                }
+              />
             </div>
           </div>
         </form>
