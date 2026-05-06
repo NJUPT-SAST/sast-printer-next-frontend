@@ -145,6 +145,8 @@ function PrinterContent() {
   const [submittingDuplex, setSubmittingDuplex] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
+  const REFRESH_COOLDOWN = 1000;
+  const lastRefreshRef = useRef(0);
 
   const acceptValue = supportedFileTypes.map((ext) => `.${ext}`).join(',');
   const supportedTypesText = supportedFileTypes.map((ext) => `.${ext}`).join(', ');
@@ -529,6 +531,13 @@ function PrinterContent() {
     localStorage.setItem('feishu_doc_picker_guide_seen', '1');
   };
 
+  const handleRefreshPreview = () => {
+    const now = Date.now();
+    if (now - lastRefreshRef.current < REFRESH_COOLDOWN) return;
+    lastRefreshRef.current = now;
+    setPreviewVersion((v) => v + 1);
+  };
+
   const handleOpenDocPicker = () => {
     dismissDocPickerGuide();
     setPickerLoading(true);
@@ -812,7 +821,7 @@ function PrinterContent() {
     );
   }
 
-  const submitBtnDisabled = !hasDocument || submitting || duplex === '' || merging;
+  const submitBtnDisabled = !hasDocument || submitting || duplex === '' || merging || previewLoading;
 
   const submitBtnClass = `w-full flex justify-center items-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-base font-medium text-white transition-all ${submitBtnDisabled
       ? 'bg-blue-300 cursor-not-allowed'
@@ -983,44 +992,26 @@ function PrinterContent() {
                     <label className="block text-sm font-medium text-gray-700 mb-2 shrink-0">
                       {t('printer.feishuUrlLabel')} <span className="text-red-500">*</span>
                     </label>
-                    <div className="relative">
-                        <input
-                          type="url"
-                          value={feishuUrl}
-                          onChange={handleFeishuUrlChange}
-                          placeholder={t('printer.feishuUrlPlaceholder')}
-                          className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:outline-none transition-shadow ${isInFeishu() && feishuUrl ? 'pr-20' : 'pr-12'} ${feishuUrlError
-                              ? 'border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50'
-                              : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
-                            }`}
-                        />
-                        {isInFeishu() && showDocPickerGuide && (
-                          <div
-                            className={`absolute z-10 animate-fade-in flex items-center ${feishuUrl ? 'right-20' : 'right-12'}`}
-                            style={{ top: '50%', transform: 'translateY(-50%)' }}
-                          >
-                            <div className="bg-gray-800 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap flex items-center gap-2">
-                              {t('printer.feishuDocPickerGuide')}
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); dismissDocPickerGuide(); }}
-                                className="text-gray-400 hover:text-white transition-colors"
-                                aria-label="Close"
-                              >
-                                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4.22 4.22a.75.75 0 0 1 1.06 0L8 6.94l2.72-2.72a.75.75 0 1 1 1.06 1.06L9.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L8 9.06l-2.72 2.72a.75.75 0 1 1-1.06-1.06L6.94 8 4.22 5.28a.75.75 0 0 1 0-1.06z" fill="currentColor"/></svg>
-                              </button>
-                            </div>
-                            <div className="w-0 h-0 border-t-4 border-b-4 border-l-4 border-t-transparent border-b-transparent border-l-gray-800" />
-                          </div>
-                        )}
-                        {isInFeishu() && (
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        value={feishuUrl}
+                        onChange={handleFeishuUrlChange}
+                        placeholder={t('printer.feishuUrlPlaceholder')}
+                        className={`flex-1 px-4 py-2 border rounded-xl focus:ring-2 focus:outline-none transition-shadow ${
+                          feishuUrlError
+                            ? 'border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50'
+                            : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+                        }`}
+                      />
+                      {isInFeishu() && (
+                        <div className="relative shrink-0">
                           <button
                             type="button"
                             onClick={handleOpenDocPicker}
                             disabled={pickerLoading || previewLoading}
                             aria-label={t('printer.feishuPickDoc')}
-                            className={`absolute flex items-center justify-center w-7 h-7 rounded-full transition-colors text-blue-500 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed ${feishuUrl ? 'right-10' : 'right-2'}`}
-                            style={{ top: '50%', transform: 'translateY(-50%)' }}
+                            className="flex items-center justify-center w-10 h-10 rounded-xl border border-gray-300 text-blue-500 hover:border-blue-300 hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {pickerLoading ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
@@ -1028,22 +1019,49 @@ function PrinterContent() {
                               <FolderOpen className="w-4 h-4" />
                             )}
                           </button>
-                        )}
-                        {feishuUrl && (
-                          <button
-                            type="button"
-                            aria-label={t('common.clear') || 'Clear'}
-                            className="absolute right-2 flex items-center justify-center w-7 h-7 rounded-full transition-colors text-gray-400 hover:bg-gray-600/70 hover:text-white"
-                            style={{ top: '50%', transform: 'translateY(-50%)' }}
-                            onClick={() => setFeishuUrl('')}
-                            tabIndex={-1}
-                          >
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M4.22 4.22a.75.75 0 0 1 1.06 0L8 6.94l2.72-2.72a.75.75 0 1 1 1.06 1.06L9.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L8 9.06l-2.72 2.72a.75.75 0 1 1-1.06-1.06L6.94 8 4.22 5.28a.75.75 0 0 1 0-1.06z" fill="currentColor"/>
-                            </svg>
-                          </button>
-                        )}
-                      </div>
+                          {showDocPickerGuide && (
+                            <div className="absolute z-10 animate-fade-in flex flex-col items-center right-0 top-full mt-1">
+                              <div className="w-0 h-0 border-l-4 border-r-4 border-b-4 border-l-transparent border-r-transparent border-b-gray-800" />
+                              <div className="bg-gray-800 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap flex items-center gap-2">
+                                {t('printer.feishuDocPickerGuide')}
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); dismissDocPickerGuide(); }}
+                                  className="text-gray-400 hover:text-white transition-colors"
+                                  aria-label="Close"
+                                >
+                                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4.22 4.22a.75.75 0 0 1 1.06 0L8 6.94l2.72-2.72a.75.75 0 1 1 1.06 1.06L9.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L8 9.06l-2.72 2.72a.75.75 0 1 1-1.06-1.06L6.94 8 4.22 5.28a.75.75 0 0 1 0-1.06z" fill="currentColor"/></svg>
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {feishuUrl && (
+                        <button
+                          type="button"
+                          onClick={handleRefreshPreview}
+                          disabled={previewLoading}
+                          aria-label={t('printer.refreshPreview')}
+                          className="flex items-center justify-center w-10 h-10 rounded-xl border border-gray-300 text-gray-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                        >
+                          <RefreshCw className={`w-4 h-4 ${previewLoading ? 'animate-spin' : ''}`} />
+                        </button>
+                      )}
+                      {feishuUrl && (
+                        <button
+                          type="button"
+                          aria-label={t('common.clear') || 'Clear'}
+                          className="flex items-center justify-center w-10 h-10 rounded-xl border border-gray-300 text-gray-400 hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors shrink-0"
+                          onClick={() => setFeishuUrl('')}
+                          tabIndex={-1}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M4.22 4.22a.75.75 0 0 1 1.06 0L8 6.94l2.72-2.72a.75.75 0 1 1 1.06 1.06L9.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L8 9.06l-2.72 2.72a.75.75 0 1 1-1.06-1.06L6.94 8 4.22 5.28a.75.75 0 0 1 0-1.06z" fill="currentColor"/>
+                          </svg>
+                        </button>
+                      )}
+                    </div>
                     {feishuUrlError && (
                       <p className="mt-1 text-xs text-red-600">{feishuUrlError}</p>
                     )}
