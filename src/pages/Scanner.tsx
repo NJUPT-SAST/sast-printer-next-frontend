@@ -304,10 +304,10 @@ export default function ScannerPage() {
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium text-gray-700">{t('scanner.device')} <span className="text-red-500">*</span></label>
-                  <button 
-                    onClick={loadDevices} 
+                  <button
+                    onClick={loadDevices}
                     disabled={loadingContext || scanning}
-                    className="text-gray-500 hover:text-blue-600 disabled:opacity-50 transition-colors"
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Refresh Devices"
                   >
                     <RefreshCw className={`w-4 h-4 ${loadingContext ? 'animate-spin' : ''}`} />
@@ -645,10 +645,10 @@ export default function ScannerPage() {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
                 <h2 className="font-medium text-gray-800">{t('scanner.scannedFiles') || 'Scanned Files'}</h2>
-                <button 
-                  onClick={fetchFiles} 
+                <button
+                  onClick={fetchFiles}
                   disabled={loadingFiles}
-                  className="text-gray-500 hover:text-blue-600 disabled:opacity-50"
+                  className="inline-flex items-center justify-center w-8 h-8 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <RefreshCw className={`w-4 h-4 ${loadingFiles ? 'animate-spin' : ''}`} />
                 </button>
