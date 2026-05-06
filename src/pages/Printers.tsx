@@ -723,6 +723,10 @@ function PrinterContent() {
         if (finalPages) {
           body.pages = finalPages;
         }
+        if (nup > 1) {
+          body.nup = nup;
+          body.nup_direction = nupDirection;
+        }
 
         const response = await api.post('/jobs/feishu', body);
 
