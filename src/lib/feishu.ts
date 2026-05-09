@@ -1,4 +1,4 @@
-import api from '@/lib/api';
+import api from "@/lib/api";
 
 interface DocPickerFile {
   filePath: string;
@@ -55,7 +55,7 @@ declare global {
 }
 
 export function isInFeishu(): boolean {
-  return typeof window !== 'undefined' && !!window.tt?.docsPicker;
+  return typeof window !== "undefined" && !!window.tt?.docsPicker;
 }
 
 let configPromise: Promise<void> | null = null;
@@ -67,18 +67,25 @@ async function ensureJSAPIConfig(): Promise<void> {
     const h5sdk = window.h5sdk;
     if (!h5sdk?.config) return;
 
-    const pageURL = window.location.href.split('#')[0];
-    const resp = await api.get<JSSDKConfigResponse>('/auth/config/jssdk-config', {
-      params: { url: pageURL },
-      timeout: 10000,
-    });
+    const pageURL = window.location.href.split("#")[0];
+    const resp = await api.get<JSSDKConfigResponse>(
+      "/auth/config/jssdk-config",
+      {
+        params: { url: pageURL },
+        timeout: 10000,
+      },
+    );
     const data = resp.data;
 
     await new Promise<void>((resolve, reject) => {
       const onReady = () => resolve();
       const onError = (err: unknown) => {
         const detail = (() => {
-          try { return JSON.stringify(err); } catch { return String(err); }
+          try {
+            return JSON.stringify(err);
+          } catch {
+            return String(err);
+          }
         })();
         reject(new Error(`h5sdk config failed: ${detail}`));
       };
@@ -89,7 +96,7 @@ async function ensureJSAPIConfig(): Promise<void> {
         timestamp: Number(data.timestamp),
         nonceStr: data.nonceStr,
         signature: data.signature,
-        jsApiList: ['docsPicker'],
+        jsApiList: ["docsPicker"],
         onSuccess: onReady,
         onFail: onError,
       });
@@ -113,7 +120,7 @@ export async function openDocPicker(options: {
 }): Promise<void> {
   const tt = window.tt;
   if (!tt?.docsPicker) {
-    options.fail?.('docsPicker not available');
+    options.fail?.("docsPicker not available");
     options.complete?.();
     return;
   }
@@ -128,19 +135,22 @@ export async function openDocPicker(options: {
 
   try {
     tt.docsPicker({
-      pickerTitle: options.pickerTitle ?? '选择云文档',
-      pickerConfirm: options.pickerConfirm ?? '选择',
+      pickerTitle: options.pickerTitle ?? "选择云文档",
+      pickerConfirm: options.pickerConfirm ?? "选择",
       success(res) {
         options.success(res.fileList ?? []);
         options.complete?.();
       },
       fail(res) {
-        const msg = res.errMsg ?? '';
-        if (msg === '' || /cancel|denied|取消|no.?perm|internal.?error/i.test(msg)) {
+        const msg = res.errMsg ?? "";
+        if (
+          msg === "" ||
+          /cancel|denied|取消|no.?perm|internal.?error/i.test(msg)
+        ) {
           options.complete?.();
           return;
         }
-        options.fail?.(msg || 'docsPicker failed');
+        options.fail?.(msg || "docsPicker failed");
         options.complete?.();
       },
     });

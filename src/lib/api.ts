@@ -1,5 +1,5 @@
-import { createApiClient } from './utils';
+import { createApiClient } from "./utils";
 
-const api = createApiClient('/api');
+const api = createApiClient("/api");
 
 export default api;

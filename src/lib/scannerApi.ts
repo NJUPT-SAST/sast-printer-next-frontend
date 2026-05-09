@@ -1,6 +1,6 @@
-import { createApiClient } from './utils';
+import { createApiClient } from "./utils";
 
-const scannerApi = createApiClient('/sane-api/api/v1');
+const scannerApi = createApiClient("/sane-api/api/v1");
 
 export interface ScannerOption {
   name: string;
@@ -72,7 +72,7 @@ export interface ScanFile {
 }
 
 export const getScanFiles = async (): Promise<ScanFile[]> => {
-  const response = await scannerApi.get<ScanFile[]>('/files');
+  const response = await scannerApi.get<ScanFile[]>("/files");
   return response.data;
 };
 
@@ -80,27 +80,41 @@ export const deleteScanFile = async (filename: string): Promise<void> => {
   await scannerApi.delete(`/files/${filename}`);
 };
 
-export const fetchContext = async (): Promise<{ devices: Scanner[]; paperSizes: PaperSize[] }> => {
-  const response = await scannerApi.get<ScannerContext>('/context?_t=' + Date.now());
+export const fetchContext = async (): Promise<{
+  devices: Scanner[];
+  paperSizes: PaperSize[];
+}> => {
+  const response = await scannerApi.get<ScannerContext>(
+    "/context?_t=" + Date.now(),
+  );
   return {
     devices: response.data.devices || [],
     paperSizes: response.data.paperSizes || [],
   };
 };
 
-export const submitScan = async (request: ScanRequest): Promise<ScanResponse> => {
-  const response = await scannerApi.post<ScanResponse>('/scan?_t=' + Date.now(), request);
+export const submitScan = async (
+  request: ScanRequest,
+): Promise<ScanResponse> => {
+  const response = await scannerApi.post<ScanResponse>(
+    "/scan?_t=" + Date.now(),
+    request,
+  );
   return response.data;
 };
 
 const getMimeTypeFromFilename = (filename: string): string => {
-  const ext = filename.split('.').pop()?.toLowerCase();
+  const ext = filename.split(".").pop()?.toLowerCase();
   switch (ext) {
-    case 'pdf': return 'application/pdf';
-    case 'png': return 'image/png';
-    case 'jpg':
-    case 'jpeg': return 'image/jpeg';
-    default: return 'application/octet-stream';
+    case "pdf":
+      return "application/pdf";
+    case "png":
+      return "image/png";
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    default:
+      return "application/octet-stream";
   }
 };
 
@@ -109,8 +123,9 @@ export const downloadScanFile = async (
   onProgress?: (event: { loaded: number; total?: number }) => void,
 ): Promise<Blob> => {
   const response = await scannerApi.get<Blob>(`/files/${filename}`, {
-    responseType: 'blob',
-    onDownloadProgress: (e) => onProgress?.({ loaded: e.loaded, total: e.total }),
+    responseType: "blob",
+    onDownloadProgress: (e) =>
+      onProgress?.({ loaded: e.loaded, total: e.total }),
   });
   return new Blob([response.data], { type: getMimeTypeFromFilename(filename) });
 };

@@ -1,8 +1,22 @@
-import { describe, it, expect, beforeAll, afterEach, afterAll, vi } from 'vitest';
-import MockAdapter from 'axios-mock-adapter';
-import scannerApi, { fetchContext, submitScan, getScanFiles, deleteScanFile, type ScanRequest } from './scannerApi';
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterEach,
+  afterAll,
+  vi,
+} from "vitest";
+import MockAdapter from "axios-mock-adapter";
+import scannerApi, {
+  fetchContext,
+  submitScan,
+  getScanFiles,
+  deleteScanFile,
+  type ScanRequest,
+} from "./scannerApi";
 
-describe('scannerApi', () => {
+describe("scannerApi", () => {
   let mock: MockAdapter;
 
   beforeAll(() => {
@@ -25,8 +39,8 @@ describe('scannerApi', () => {
     mock.restore();
   });
 
-  it('fetchContext should call GET /context and return data', async () => {
-    const mockDevices = [{ id: '1', name: 'Scanner 1' }];
+  it("fetchContext should call GET /context and return data", async () => {
+    const mockDevices = [{ id: "1", name: "Scanner 1" }];
     const mockData = { devices: mockDevices, config: {} };
     mock.onGet(/\/context\?_t=\d+/).reply(200, mockData);
 
@@ -35,12 +49,12 @@ describe('scannerApi', () => {
     expect(mock.history.get[0].url).toMatch(/\/context\?_t=\d+/);
   });
 
-  it('submitScan should call POST /scan and return data', async () => {
+  it("submitScan should call POST /scan and return data", async () => {
     const request = {
-      params: { deviceId: '1', resolution: '300', mode: 'Color' },
-      pipeline: 'JPG',
+      params: { deviceId: "1", resolution: "300", mode: "Color" },
+      pipeline: "JPG",
     };
-    const mockData = { jobId: '123' };
+    const mockData = { jobId: "123" };
     mock.onPost(/\/scan\?_t=\d+/).reply(200, mockData);
 
     const data = await submitScan(request as ScanRequest);
@@ -49,28 +63,28 @@ describe('scannerApi', () => {
     expect(JSON.parse(mock.history.post[0].data)).toEqual(request);
   });
 
-  it('getScanFiles should call GET /files and return data', async () => {
+  it("getScanFiles should call GET /files and return data", async () => {
     const mockFiles = [
       {
-        fullname: 'scan1.jpg',
-        extension: '.jpg',
+        fullname: "scan1.jpg",
+        extension: ".jpg",
         lastModified: 123456789,
         size: 1024,
-        sizeString: '1 KB',
+        sizeString: "1 KB",
         isDirectory: false,
-        name: 'scan1',
-        path: '/scan1.jpg'
-      }
+        name: "scan1",
+        path: "/scan1.jpg",
+      },
     ];
-    mock.onGet('/files').reply(200, mockFiles);
+    mock.onGet("/files").reply(200, mockFiles);
 
     const data = await getScanFiles();
     expect(data).toEqual(mockFiles);
-    expect(mock.history.get[0].url).toBe('/files');
+    expect(mock.history.get[0].url).toBe("/files");
   });
 
-  it('deleteScanFile should call DELETE /files/{filename}', async () => {
-    const filename = 'test-file.pdf';
+  it("deleteScanFile should call DELETE /files/{filename}", async () => {
+    const filename = "test-file.pdf";
     mock.onDelete(`/files/${filename}`).reply(200);
 
     await deleteScanFile(filename);

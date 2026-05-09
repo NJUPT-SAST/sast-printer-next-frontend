@@ -1,12 +1,12 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import AuthChecker from './components/AuthChecker';
-import { LanguageProvider } from './lib/i18n';
-import LanguageSwitcher from './components/LanguageSwitcher';
-import { UiProvider } from './components/UiProvider';
-import Header from './components/Header';
-import Home from './pages/Home';
-import Printers from './pages/Printers';
-import Scanner from './pages/Scanner';
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import AuthChecker from "./components/AuthChecker";
+import { LanguageProvider } from "./lib/i18n";
+import LanguageSwitcher from "./components/LanguageSwitcher";
+import { UiProvider } from "./components/UiProvider";
+import Header from "./components/Header";
+import Home from "./pages/Home";
+import Printers from "./pages/Printers";
+import Scanner from "./pages/Scanner";
 
 export default function App() {
   return (

@@ -1,6 +1,6 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext } from "react";
 
-export type ToastType = 'success' | 'error' | 'info';
+export type ToastType = "success" | "error" | "info";
 
 export interface ToastOptions {
   message: string;
@@ -27,6 +27,6 @@ export const UiContext = createContext<UiContextType | undefined>(undefined);
 
 export function useUi() {
   const context = useContext(UiContext);
-  if (!context) throw new Error('useUi must be used within UiProvider');
+  if (!context) throw new Error("useUi must be used within UiProvider");
   return context;
 }

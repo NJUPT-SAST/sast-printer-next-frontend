@@ -1,9 +1,9 @@
-import React from 'react';
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf';
-import pdfWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
-import { Loader2 } from 'lucide-react';
-import { useTranslation } from '@/lib/i18n';
-import { getOptimalLayout } from '@/lib/utils';
+import React from "react";
+import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf";
+import pdfWorker from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
+import { Loader2 } from "lucide-react";
+import { useTranslation } from "@/lib/i18n";
+import { getOptimalLayout } from "@/lib/utils";
 
 GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -24,8 +24,8 @@ export const renderPdfToImages = async (blob: Blob) => {
   for (let pageNum = 1; pageNum <= totalPages; pageNum += 1) {
     const page = await doc.getPage(pageNum);
     const viewport = page.getViewport({ scale: 1.2 });
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
 
     if (!context) {
       continue;
@@ -35,7 +35,7 @@ export const renderPdfToImages = async (blob: Blob) => {
     canvas.height = viewport.height;
 
     await page.render({ canvas, canvasContext: context, viewport }).promise;
-    images.push(canvas.toDataURL('image/png'));
+    images.push(canvas.toDataURL("image/png"));
     pageDimensions.push({
       pageWidth: viewport.width / viewport.scale,
       pageHeight: viewport.height / viewport.scale,
@@ -53,7 +53,7 @@ export interface DocumentPreviewProps {
   loadingText?: string;
   fallbackNode?: React.ReactNode;
   nup?: 2 | 4 | 6;
-  nupDirection?: 'horizontal' | 'vertical';
+  nupDirection?: "horizontal" | "vertical";
   pageDimensions?: PageDimensions[];
 }
 
@@ -64,7 +64,7 @@ export function DocumentPreview({
   loadingText,
   fallbackNode,
   nup,
-  nupDirection = 'horizontal',
+  nupDirection = "horizontal",
   pageDimensions,
 }: DocumentPreviewProps) {
   const { t } = useTranslation();
@@ -72,7 +72,11 @@ export function DocumentPreview({
   const renderNupGrid = () => {
     if (!nup || nup <= 1) return null;
     const layout = pageDimensions?.[0]
-      ? getOptimalLayout(pageDimensions[0].pageWidth, pageDimensions[0].pageHeight, nup)
+      ? getOptimalLayout(
+          pageDimensions[0].pageWidth,
+          pageDimensions[0].pageHeight,
+          nup,
+        )
       : null;
     const cols = layout?.cols ?? (nup === 6 ? 3 : 2);
     const rows = layout?.rows ?? (nup === 2 ? 1 : 2);
@@ -91,23 +95,30 @@ export function DocumentPreview({
       }
 
       sheets.push(
-        <div key={`sheet-${s}`} className="bg-white rounded-lg border border-gray-200 shadow-sm p-2">
+        <div
+          key={`sheet-${s}`}
+          className="bg-white rounded-lg border border-gray-200 shadow-sm p-2"
+        >
           <p className="text-xs text-gray-500 mb-2">
-            {t('printer.nupSheet', { sheet: s + 1, start: startPage, end: endPage })}
+            {t("printer.nupSheet", {
+              sheet: s + 1,
+              start: startPage,
+              end: endPage,
+            })}
           </p>
           <div
             className="grid gap-1"
             style={{
               gridTemplateColumns: `repeat(${cols}, 1fr)`,
               gridTemplateRows: `repeat(${rows}, 1fr)`,
-              gridAutoFlow: nupDirection === 'vertical' ? 'column' : 'row',
+              gridAutoFlow: nupDirection === "vertical" ? "column" : "row",
             }}
           >
             {sheetImages.map((src, i) => (
               <img
                 key={`page-${s * perSheet + i}`}
                 src={src}
-                alt={t('printer.previewPage', { page: s * perSheet + i + 1 })}
+                alt={t("printer.previewPage", { page: s * perSheet + i + 1 })}
                 className="w-full h-auto rounded border border-gray-100"
               />
             ))}
@@ -125,7 +136,7 @@ export function DocumentPreview({
       {loading ? (
         <div className="flex-1 flex items-center justify-center text-gray-600 text-sm">
           <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-          {loadingText || t('printer.previewGenerating')}
+          {loadingText || t("printer.previewGenerating")}
         </div>
       ) : error ? (
         <div className="flex-1 flex items-center justify-center px-6 text-center text-red-600 text-sm">
@@ -143,17 +154,19 @@ export function DocumentPreview({
               className="bg-white rounded-lg border border-gray-200 shadow-sm p-2"
             >
               <p className="text-xs text-gray-500 mb-2">
-                {t('printer.previewPage', { page: index + 1 })}
+                {t("printer.previewPage", { page: index + 1 })}
               </p>
               <img
                 src={image}
-                alt={t('printer.previewPage', { page: index + 1 })}
+                alt={t("printer.previewPage", { page: index + 1 })}
                 className="w-full h-auto rounded"
               />
             </div>
           ))}
         </div>
-      ) : fallbackNode ?? null}
+      ) : (
+        (fallbackNode ?? null)
+      )}
     </div>
   );
 }
