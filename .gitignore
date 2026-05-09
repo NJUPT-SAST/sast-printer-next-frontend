@@ -46,4 +46,8 @@ next-env.d.ts
 tasks.json
 PROGRESS.txt
 
+# agent
 .superpowers
+.agents
+.claude
+skills-lock.json

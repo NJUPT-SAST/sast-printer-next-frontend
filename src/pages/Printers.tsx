@@ -1,18 +1,54 @@
-import { useEffect, useState, useRef, useMemo, useCallback, Suspense } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import api from '@/lib/api';
-import { useTranslation } from '@/lib/i18n';
-import { useUi } from '@/components/ui-context';
-import { ChevronLeft, PrinterIcon, UploadCloud, FileText, Loader2, RefreshCw, Download, ClipboardList, FolderOpen, Settings, Upload, ArrowLeftRight, ArrowUpDown } from 'lucide-react';
-import Select from '@/components/Select';
-import { Link } from 'react-router-dom';
-import PrinterList from '@/components/PrinterList';
-import { DocumentPreview, renderPdfToImages } from '@/components/DocumentPreview';
-import JobsModal from '@/components/JobsModal';
-import ImageFileList from '@/components/ImageFileList';
-import { apiErrMsg, parseGMTDate, downloadFile, imagesToPdf, createNupPdf } from '@/lib/utils';
-import { isInFeishu, openDocPicker, enableLeaveConfirm, disableLeaveConfirm } from '@/lib/feishu';
-import { MAX_IMAGES } from '@/lib/constants';
+import {
+  useEffect,
+  useState,
+  useRef,
+  useMemo,
+  useCallback,
+  Suspense,
+} from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import api from "@/lib/api";
+import { useTranslation } from "@/lib/i18n";
+import { useUi } from "@/components/ui-context";
+import {
+  ChevronLeft,
+  PrinterIcon,
+  UploadCloud,
+  FileText,
+  Loader2,
+  RefreshCw,
+  Download,
+  ClipboardList,
+  FolderOpen,
+  Settings,
+  Upload,
+  ArrowLeftRight,
+  ArrowUpDown,
+} from "lucide-react";
+import Select from "@/components/Select";
+import { Link } from "react-router-dom";
+import PrinterList from "@/components/PrinterList";
+import {
+  DocumentPreview,
+  renderPdfToImages,
+} from "@/components/DocumentPreview";
+import JobsModal from "@/components/JobsModal";
+import BatchFileList from "@/components/BatchFileList";
+import {
+  getFileExtension,
+  apiErrMsg,
+  parseGMTDate,
+  downloadFile,
+  imagesToPdf,
+  createNupPdf,
+} from "@/lib/utils";
+import {
+  isInFeishu,
+  openDocPicker,
+  enableLeaveConfirm,
+  disableLeaveConfirm,
+} from "@/lib/feishu";
+import { MAX_IMAGES, MAX_BATCH_FILES, type BatchType } from "@/lib/constants";
 
 interface PrinterInfo {
   id: string;
@@ -36,111 +72,140 @@ function PrinterContent() {
   const { toast } = useUi();
   const router = useNavigate();
   const [searchParams] = useSearchParams();
-  const id = searchParams.get('id');
+  const id = searchParams.get("id");
 
   const [printer, setPrinter] = useState<PrinterInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
-  const [supportedFileTypes, setSupportedFileTypes] = useState<string[]>(['pdf']);
+  const [supportedFileTypes, setSupportedFileTypes] = useState<string[]>([
+    "pdf",
+  ]);
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [previewImages, setPreviewImages] = useState<string[]>([]);
-  const [pageDimensions, setPageDimensions] = useState<{ pageWidth: number; pageHeight: number }[]>([]);
+  const [pageDimensions, setPageDimensions] = useState<
+    { pageWidth: number; pageHeight: number }[]
+  >([]);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewPageCount, setPreviewPageCount] = useState<number | null>(null);
   const [previewVersion, setPreviewVersion] = useState(0);
   const [copies, setCopies] = useState(1);
-  const [duplex, setDuplex] = useState('');
-  const [collate, setCollate] = useState('true');
-  const [pageSet, setPageSet] = useState('all');
-  const [pages, setPages] = useState('');
-  const validatePageRange = useCallback((input: string, maxPage?: number | null, strictBounds = false) => {
-    if (!input.trim()) {
-      return { valid: true, error: '' };
-    }
-
-    if (strictBounds && !maxPage) {
-      return { valid: false, error: t('printer.pageCountUnavailable') };
-    }
-
-    const trimmed = input.trim();
-    const parts = trimmed.split(',').map((p) => p.trim());
-
-    for (const part of parts) {
-      if (!part) {
-        return { valid: false, error: t('printer.pageRangeEmpty') };
+  const [duplex, setDuplex] = useState("");
+  const [collate, setCollate] = useState("true");
+  const [pageSet, setPageSet] = useState("all");
+  const [pages, setPages] = useState("");
+  const validatePageRange = useCallback(
+    (input: string, maxPage?: number | null, strictBounds = false) => {
+      if (!input.trim()) {
+        return { valid: true, error: "" };
       }
 
-      if (part.includes('-')) {
-        const rangeParts = part.split('-').map((s) => s.trim());
-        if (rangeParts.length !== 2) {
-          return { valid: false, error: t('printer.pageRangeInvalid') };
+      if (strictBounds && !maxPage) {
+        return { valid: false, error: t("printer.pageCountUnavailable") };
+      }
+
+      const trimmed = input.trim();
+      const parts = trimmed.split(",").map((p) => p.trim());
+
+      for (const part of parts) {
+        if (!part) {
+          return { valid: false, error: t("printer.pageRangeEmpty") };
         }
 
-        const [startStr, endStr] = rangeParts;
+        if (part.includes("-")) {
+          const rangeParts = part.split("-").map((s) => s.trim());
+          if (rangeParts.length !== 2) {
+            return { valid: false, error: t("printer.pageRangeInvalid") };
+          }
 
-        if (!startStr || !endStr) {
-          return { valid: false, error: t('printer.pageRangeInvalid') };
-        }
+          const [startStr, endStr] = rangeParts;
 
-        if (!/^\d+$/.test(startStr) || !/^\d+$/.test(endStr)) {
-          return { valid: false, error: t('printer.pageRangeInvalid') };
-        }
+          if (!startStr || !endStr) {
+            return { valid: false, error: t("printer.pageRangeInvalid") };
+          }
 
-        const start = parseInt(startStr, 10);
-        const end = parseInt(endStr, 10);
+          if (!/^\d+$/.test(startStr) || !/^\d+$/.test(endStr)) {
+            return { valid: false, error: t("printer.pageRangeInvalid") };
+          }
 
-        if (isNaN(start) || isNaN(end) || start <= 0 || end <= 0) {
-          return { valid: false, error: t('printer.pageRangeInvalid') };
-        }
+          const start = parseInt(startStr, 10);
+          const end = parseInt(endStr, 10);
 
-        if (start > end) {
-          return { valid: false, error: t('printer.pageRangeInvalid') };
-        }
+          if (isNaN(start) || isNaN(end) || start <= 0 || end <= 0) {
+            return { valid: false, error: t("printer.pageRangeInvalid") };
+          }
 
-        if (maxPage && (start > maxPage || end > maxPage)) {
-          return { valid: false, error: t('printer.pageRangeOutOfBounds', { max: maxPage }) };
-        }
-      } else {
-        if (!/^\d+$/.test(part)) {
-          return { valid: false, error: t('printer.pageRangeInvalid') };
-        }
+          if (start > end) {
+            return { valid: false, error: t("printer.pageRangeInvalid") };
+          }
 
-        const page = parseInt(part, 10);
+          if (maxPage && (start > maxPage || end > maxPage)) {
+            return {
+              valid: false,
+              error: t("printer.pageRangeOutOfBounds", { max: maxPage }),
+            };
+          }
+        } else {
+          if (!/^\d+$/.test(part)) {
+            return { valid: false, error: t("printer.pageRangeInvalid") };
+          }
 
-        if (isNaN(page) || page <= 0) {
-          return { valid: false, error: t('printer.pageRangeInvalid') };
-        }
+          const page = parseInt(part, 10);
 
-        if (maxPage && page > maxPage) {
-          return { valid: false, error: t('printer.pageRangeOutOfBounds', { max: maxPage }) };
+          if (isNaN(page) || page <= 0) {
+            return { valid: false, error: t("printer.pageRangeInvalid") };
+          }
+
+          if (maxPage && page > maxPage) {
+            return {
+              valid: false,
+              error: t("printer.pageRangeOutOfBounds", { max: maxPage }),
+            };
+          }
         }
       }
-    }
 
-    return { valid: true, error: '' };
-  }, [t]);
+      return { valid: true, error: "" };
+    },
+    [t],
+  );
 
-  const pagesError = useMemo(() => validatePageRange(pages, previewPageCount).error, [pages, previewPageCount, validatePageRange]);
+  const pagesError = useMemo(
+    () => validatePageRange(pages, previewPageCount).error,
+    [pages, previewPageCount, validatePageRange],
+  );
   const [nup, setNup] = useState<1 | 2 | 4 | 6>(1);
-  const [nupDirection, setNupDirection] = useState<'horizontal' | 'vertical'>('horizontal');
+  const [nupDirection, setNupDirection] = useState<"horizontal" | "vertical">(
+    "horizontal",
+  );
 
-  const [sourceTab, setSourceTab] = useState<'file' | 'feishu'>('file');
-  const [feishuUrl, setFeishuUrl] = useState('');
-  const [feishuUrlError, setFeishuUrlError] = useState('');
+  const [sourceTab, setSourceTab] = useState<"file" | "feishu">("file");
+  const [feishuUrl, setFeishuUrl] = useState("");
+  const [feishuUrlError, setFeishuUrlError] = useState("");
   const [pickerLoading, setPickerLoading] = useState(false);
   const [showDocPickerGuide, setShowDocPickerGuide] = useState(
-    () => isInFeishu() && !localStorage.getItem('feishu_doc_picker_guide_seen'),
+    () => isInFeishu() && !localStorage.getItem("feishu_doc_picker_guide_seen"),
   );
 
   const [submitting, setSubmitting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchType, setBatchType] = useState<BatchType | null>(null);
+  const [batchFiles, setBatchFiles] = useState<File[]>([]);
+  const [batchProgress, setBatchProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
+  const [previewIndex, setPreviewIndex] = useState(0);
   const [merging, setMerging] = useState(false);
   const [isJobsModalOpen, setIsJobsModalOpen] = useState(false);
-  const [manualDuplexHook, setManualDuplexHook] = useState<{ url: string, expiresAt: string } | null>(null);
+  const [manualDuplexHook, setManualDuplexHook] = useState<{
+    url: string;
+    expiresAt: string;
+  } | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [submittingDuplex, setSubmittingDuplex] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -148,30 +213,27 @@ function PrinterContent() {
   const REFRESH_COOLDOWN = 1000;
   const lastRefreshRef = useRef(0);
 
-  const acceptValue = supportedFileTypes.map((ext) => `.${ext}`).join(',');
-  const supportedTypesText = supportedFileTypes.map((ext) => `.${ext}`).join(', ');
-
-  const getFileExtension = (fileName: string) => {
-    const parts = fileName.split('.');
-    if (parts.length <= 1) return '';
-    return parts[parts.length - 1].toLowerCase();
-  };
+  const acceptValue = supportedFileTypes.map((ext) => `.${ext}`).join(",");
+  const supportedTypesText = supportedFileTypes
+    .map((ext) => `.${ext}`)
+    .join(", ");
 
   const isSupportedFile = (targetFile: File) => {
     const ext = getFileExtension(targetFile.name);
     return supportedFileTypes.includes(ext);
   };
 
-  const FEISHU_URL_RE = /^https:\/\/[^/]+\.feishu\.cn\/(docx|doc|sheets|bitable|mindnotes|wiki)\/[A-Za-z0-9_-]{27}([?#].*)?$/;
+  const FEISHU_URL_RE =
+    /^https:\/\/[^/]+\.feishu\.cn\/(docx|doc|sheets|bitable|mindnotes|wiki)\/[A-Za-z0-9_-]{27}([?#].*)?$/;
   const isValidFeishuUrl = (url: string) => FEISHU_URL_RE.test(url.trim());
 
-  const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']);
+  const IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "gif", "webp", "bmp"]);
   const isImageFile = (f: File) => IMAGE_EXTS.has(getFileExtension(f.name));
 
   const rejectUnsupportedFile = () => {
     toast({
-      message: t('printer.unsupportedFileType', { types: supportedTypesText }),
-      type: 'error',
+      message: t("printer.unsupportedFileType", { types: supportedTypesText }),
+      type: "error",
     });
   };
 
@@ -182,11 +244,16 @@ function PrinterContent() {
     }
 
     const selectedPages = new Set<number>();
-    const parts = input.trim().split(',').map((part) => part.trim());
+    const parts = input
+      .trim()
+      .split(",")
+      .map((part) => part.trim());
 
     for (const part of parts) {
-      if (part.includes('-')) {
-        const [startStr, endStr] = part.split('-').map((segment) => segment.trim());
+      if (part.includes("-")) {
+        const [startStr, endStr] = part
+          .split("-")
+          .map((segment) => segment.trim());
         const start = parseInt(startStr, 10);
         const end = parseInt(endStr, 10);
 
@@ -202,17 +269,20 @@ function PrinterContent() {
   };
 
   const getSelectedPages = (): number[] | null => {
-    if (!pages.trim() && pageSet === 'all') return null;
+    if (!pages.trim() && pageSet === "all") return null;
 
     let pageList: number[];
     if (!pages.trim() && previewPageCount) {
       pageList = Array.from({ length: previewPageCount }, (_, i) => i + 1);
     } else {
       const selected = new Set<number>();
-      const parts = pages.trim().split(',').map((p) => p.trim());
+      const parts = pages
+        .trim()
+        .split(",")
+        .map((p) => p.trim());
       for (const part of parts) {
-        if (part.includes('-')) {
-          const [start, end] = part.split('-').map(Number);
+        if (part.includes("-")) {
+          const [start, end] = part.split("-").map(Number);
           for (let i = start; i <= end; i++) selected.add(i);
         } else if (part) {
           selected.add(Number(part));
@@ -221,30 +291,44 @@ function PrinterContent() {
       pageList = Array.from(selected).sort((a, b) => a - b);
     }
 
-    if (pageSet !== 'all') {
-      pageList = pageList.filter((p) => (pageSet === 'odd' ? p % 2 !== 0 : p % 2 === 0));
+    if (pageSet !== "all") {
+      pageList = pageList.filter((p) =>
+        pageSet === "odd" ? p % 2 !== 0 : p % 2 === 0,
+      );
     }
 
     return pageList.length > 0 ? pageList : null;
   };
 
-  const selectedPageCount = getSelectedPageCount(pages, previewPageCount);
-  const isDuplexDisabled = (previewPageCount !== null && previewPageCount <= 1) || (selectedPageCount === 1);
-  const isNupDisabled = (previewPageCount !== null && previewPageCount <= 1) || (selectedPageCount !== null && selectedPageCount <= 1);
+  const selectedPages = useMemo(() => getSelectedPages(), [
+    pages,
+    pageSet,
+    previewPageCount,
+  ]);
+  const selectedPageCount = useMemo(
+    () => getSelectedPageCount(pages, previewPageCount),
+    [pages, previewPageCount],
+  );
+  const isDuplexDisabled =
+    (previewPageCount !== null && previewPageCount <= 1) ||
+    selectedPageCount === 1;
+  const isNupDisabled =
+    (previewPageCount !== null && previewPageCount <= 1) ||
+    (selectedPageCount !== null && selectedPageCount <= 1);
 
   const handlePagesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setPages(value);
 
-    const { error } = validatePageRange(value, previewPageCount);
-    setPagesError(error);
-
-    if (value.trim() === '') {
+    if (value.trim() === "") {
       return;
     }
 
-    if ((previewPageCount !== null && previewPageCount <= 1) || getSelectedPageCount(value, previewPageCount) === 1) {
-      setDuplex('off');
+    if (
+      (previewPageCount !== null && previewPageCount <= 1) ||
+      getSelectedPageCount(value, previewPageCount) === 1
+    ) {
+      setDuplex("off");
     }
   };
 
@@ -255,7 +339,10 @@ function PrinterContent() {
   useEffect(() => {
     if (manualDuplexHook?.expiresAt) {
       const updateTimer = () => {
-        const remaining = Math.max(0, parseGMTDate(manualDuplexHook.expiresAt).getTime() - Date.now());
+        const remaining = Math.max(
+          0,
+          parseGMTDate(manualDuplexHook.expiresAt).getTime() - Date.now(),
+        );
         setTimeLeft(remaining);
         if (remaining === 0) {
           setManualDuplexHook(null);
@@ -270,7 +357,12 @@ function PrinterContent() {
     }
   }, [manualDuplexHook]);
 
-  const hasDocument = sourceTab === 'file' ? !!file : isValidFeishuUrl(feishuUrl);
+  const hasDocument =
+    sourceTab === "file"
+      ? batchMode
+        ? batchType !== null
+        : !!file
+      : isValidFeishuUrl(feishuUrl);
 
   useEffect(() => {
     if (!hasDocument) {
@@ -295,25 +387,37 @@ function PrinterContent() {
       try {
         let response;
 
-        if (sourceTab === 'file' && file) {
+        const idx = Math.min(previewIndex, batchFiles.length - 1);
+        let previewFile = batchMode ? batchFiles[idx] : file;
+        if (!previewFile && batchType === "image") {
+          const merged = await imagesToPdf(imageFiles);
+          previewFile = new File([merged], "preview.pdf", {
+            type: "application/pdf",
+          });
+        }
+        if (sourceTab === "file" && previewFile) {
           const formData = new FormData();
-          formData.append('file', file);
+          formData.append("file", previewFile);
           if (id) {
-            formData.append('printer_id', id);
+            formData.append("printer_id", id);
           }
 
-          response = await api.post('/jobs/preview', formData, {
+          response = await api.post("/jobs/preview", formData, {
             headers: {
-              'Content-Type': 'multipart/form-data',
+              "Content-Type": "multipart/form-data",
             },
-            responseType: 'blob',
+            responseType: "blob",
             signal: controller.signal,
           });
         } else {
-          response = await api.post('/jobs/preview/feishu', { url: feishuUrl.trim() }, {
-            responseType: 'blob',
-            signal: controller.signal,
-          });
+          response = await api.post(
+            "/jobs/preview/feishu",
+            { url: feishuUrl.trim() },
+            {
+              responseType: "blob",
+              signal: controller.signal,
+            },
+          );
         }
 
         const blob = response.data as Blob;
@@ -322,13 +426,22 @@ function PrinterContent() {
           if (oldUrl) URL.revokeObjectURL(oldUrl);
           return objectUrl;
         });
-        const { totalPages, images, pageDimensions: dims } = await renderPdfToImages(blob);
+        const {
+          totalPages,
+          images,
+          pageDimensions: dims,
+        } = await renderPdfToImages(blob);
         setPreviewPageCount(totalPages);
         setPreviewImages(images);
         setPageDimensions(dims);
       } catch (err: unknown) {
         // Ignore cancellation errors from rapid file changes.
-        if (typeof err === 'object' && err !== null && 'name' in err && err.name === 'CanceledError') {
+        if (
+          typeof err === "object" &&
+          err !== null &&
+          "name" in err &&
+          err.name === "CanceledError"
+        ) {
           return;
         }
 
@@ -340,11 +453,13 @@ function PrinterContent() {
           return null;
         });
 
-        let msg = t('printer.previewLoadFailed');
+        let msg = t("printer.previewLoadFailed");
         if (err instanceof Error) msg = err.message;
-        const anyErr = err as { response?: { status?: number; data?: { error?: string } } };
+        const anyErr = err as {
+          response?: { status?: number; data?: { error?: string } };
+        };
         if (anyErr.response?.status === 403) {
-          msg = t('printer.feishuForbidden');
+          msg = t("printer.feishuForbidden");
         } else if (anyErr.response?.data?.error) {
           msg = anyErr.response.data.error;
         }
@@ -359,7 +474,19 @@ function PrinterContent() {
     return () => {
       controller.abort();
     };
-  }, [hasDocument, sourceTab, file, feishuUrl, id, previewVersion, t]);
+  }, [
+    hasDocument,
+    sourceTab,
+    file,
+    batchMode,
+    batchFiles,
+    imageFiles,
+    previewIndex,
+    feishuUrl,
+    id,
+    previewVersion,
+    t,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -370,36 +497,38 @@ function PrinterContent() {
   }, [previewPdfUrl]);
 
   useEffect(() => {
-    if (imageFiles.length === 0) return;
+    if (imageFiles.length === 0 || batchMode) return;
     let cancelled = false;
     const merge = async () => {
       setMerging(true);
       try {
         const blob = await imagesToPdf(imageFiles);
         if (!cancelled) {
-          setFile(new File([blob], 'images.pdf', { type: 'application/pdf' }));
+          setFile(new File([blob], "images.pdf", { type: "application/pdf" }));
         }
       } catch (err: unknown) {
         if (!cancelled) {
-          toast({ message: apiErrMsg(err, t('error.submit')), type: 'error' });
+          toast({ message: apiErrMsg(err, t("error.submit")), type: "error" });
         }
       } finally {
         if (!cancelled) setMerging(false);
       }
     };
     merge();
-    return () => { cancelled = true; };
-  }, [imageFiles, toast, t]);
+    return () => {
+      cancelled = true;
+    };
+  }, [imageFiles, batchMode, toast, t]);
 
   useEffect(() => {
-    if (isDuplexDisabled && duplex === 'true') {
-      setDuplex('off'); // eslint-disable-line react-hooks/set-state-in-effect -- auto-correct duplex for single page
+    if (isDuplexDisabled && duplex === "true") {
+      setDuplex("off"); // eslint-disable-line react-hooks/set-state-in-effect -- auto-correct duplex for single page
     }
   }, [duplex, isDuplexDisabled]);
 
   useEffect(() => {
-    if (duplex !== '' && !isDuplexDisabled) {
-      localStorage.setItem('duplex_preference', duplex);
+    if (duplex !== "" && !isDuplexDisabled) {
+      localStorage.setItem("duplex_preference", duplex);
     }
   }, [duplex, isDuplexDisabled]);
 
@@ -410,17 +539,29 @@ function PrinterContent() {
   }, [isNupDisabled, nup]);
 
   useEffect(() => {
+    if (previewIndex >= batchFiles.length) {
+      setPreviewIndex(Math.max(0, batchFiles.length - 1));
+    }
+  }, [batchFiles.length, previewIndex]);
+
+  useEffect(() => {
     const fetchSupportedFileTypes = async () => {
       try {
-        const response = await api.get<SupportedFileTypesResponse>('/jobs/supported-file-types');
+        const response = await api.get<SupportedFileTypesResponse>(
+          "/jobs/supported-file-types",
+        );
         const types = (response.data.supported_file_types || [])
-          .map((item) => String(item || '').trim().toLowerCase())
+          .map((item) =>
+            String(item || "")
+              .trim()
+              .toLowerCase(),
+          )
           .filter(Boolean);
 
         const uniqueTypes = Array.from(new Set(types));
-        setSupportedFileTypes(uniqueTypes.length > 0 ? uniqueTypes : ['pdf']);
+        setSupportedFileTypes(uniqueTypes.length > 0 ? uniqueTypes : ["pdf"]);
       } catch {
-        setSupportedFileTypes(['pdf']);
+        setSupportedFileTypes(["pdf"]);
       }
     };
 
@@ -428,10 +569,10 @@ function PrinterContent() {
       try {
         const response = await api.get(`/printers/${id}`);
         setPrinter(response.data);
-        const saved = localStorage.getItem('duplex_preference');
-        setDuplex(saved ?? '');
+        const saved = localStorage.getItem("duplex_preference");
+        setDuplex(saved ?? "");
       } catch (err: unknown) {
-        setError(apiErrMsg(err, t('error.fetchPrinters')));
+        setError(apiErrMsg(err, t("error.fetchPrinters")));
       } finally {
         setLoading(false);
       }
@@ -453,42 +594,194 @@ function PrinterContent() {
   }, [id, t]);
 
   const handleAddImages = (incoming: File[]) => {
+    const valid = incoming.filter(isImageFile);
+    if (valid.length === 0) {
+      if (incoming.length > 0)
+        toast({ message: t("printer.imageOnly"), type: "error" });
+      return;
+    }
+    if (valid.length < incoming.length) {
+      toast({ message: t("printer.imageOnly"), type: "error" });
+    }
     setImageFiles((prev) => {
       const available = MAX_IMAGES - prev.length;
       if (available <= 0) {
-        toast({ message: t('printer.imageLimitReached'), type: 'error' });
+        toast({ message: t("printer.imageLimitReached"), type: "error" });
         return prev;
       }
-      const toAdd = incoming.slice(0, available);
-      if (incoming.length > available) {
-        toast({ message: t('printer.imageLimitReached'), type: 'error' });
+      const toAdd = valid.slice(0, available);
+      if (valid.length > available) {
+        toast({ message: t("printer.imageLimitReached"), type: "error" });
       }
       return [...prev, ...toAdd];
     });
+    if (batchMode) setBatchType("image");
+  };
+
+  const toggleBatchMode = () => {
+    if (batchMode) {
+      if (batchFiles.length > 0) {
+        setFile(batchFiles[0]);
+        setBatchFiles([]);
+      }
+      if (imageFiles.length > 0) {
+        setImageFiles([]);
+      }
+      setBatchType(null);
+      setBatchProgress(null);
+      setBatchMode(false);
+    } else {
+      if (file) {
+        setBatchFiles([file]);
+        setBatchType("doc");
+        setFile(null);
+      }
+      setBatchMode(true);
+    }
+  };
+
+  const handleAddBatchFiles = (incoming: File[]) => {
+    const docs = incoming.filter(isSupportedFile);
+    if (docs.length === 0) {
+      rejectUnsupportedFile();
+      return;
+    }
+    if (docs.length < incoming.length) {
+      toast({ message: t("printer.docOnlyBatch"), type: "error" });
+    }
+    setBatchFiles((prev) => {
+      const available = MAX_BATCH_FILES - prev.length;
+      if (available <= 0) {
+        toast({ message: t("printer.batchFileLimitReached"), type: "error" });
+        return prev;
+      }
+      const toAdd = docs.slice(0, available);
+      if (docs.length > available) {
+        toast({ message: t("printer.batchFileLimitReached"), type: "error" });
+      }
+      return [...prev, ...toAdd];
+    });
+    if (batchMode) setBatchType("doc");
+  };
+
+  const handleReplaceBatchFile = (index: number, newFile: File) => {
+    if (isImageFile(newFile)) {
+      toast({ message: t("printer.docOnlyBatch"), type: "error" });
+      return;
+    }
+    if (!isSupportedFile(newFile)) {
+      rejectUnsupportedFile();
+      return;
+    }
+    setBatchFiles((prev) => prev.map((f, i) => (i === index ? newFile : f)));
+  };
+
+  const handleDeleteBatchFile = (index: number) => {
+    setBatchFiles((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      if (next.length === 0) setBatchType(null);
+      return next;
+    });
+  };
+
+  const clearBatchFiles = () => {
+    setImageFiles([]);
+    setBatchFiles([]);
+    setBatchType(null);
+    setPreviewIndex(0);
+  };
+
+  const handleBatchAdd = (incoming: File[]) => {
+    if (incoming.length === 0) return;
+    if (isImageFile(incoming[0])) {
+      handleAddImages(incoming);
+      if (!batchType) setBatchType("image");
+    } else if (isSupportedFile(incoming[0])) {
+      handleAddBatchFiles(incoming);
+    } else {
+      rejectUnsupportedFile();
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-    if (isImageFile(files[0])) {
-      const valid = files.filter(isImageFile);
-      handleAddImages(valid);
-    } else {
-      if (!isSupportedFile(files[0])) { rejectUnsupportedFile(); return; }
-      setImageFiles([]);
-      setFile(files[0]);
+
+    const images = files.filter(isImageFile);
+    const docs = files.filter((f) => !isImageFile(f) && isSupportedFile(f));
+    const unsupported = files.filter(
+      (f) => !isImageFile(f) && !isSupportedFile(f),
+    );
+
+    if (unsupported.length > 0) {
+      rejectUnsupportedFile();
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
     }
-    if (fileInputRef.current) fileInputRef.current.value = '';
+
+    const hasImages = images.length > 0;
+    const hasDocs = docs.length > 0;
+
+    if (hasImages && hasDocs) {
+      toast({ message: t("printer.mixedTypesRejected"), type: "error" });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    if (hasImages) {
+      if (batchMode && batchType === "doc") {
+        toast({ message: t("printer.docOnlyBatch"), type: "error" });
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+      if (batchMode) {
+        handleAddImages(images);
+      } else if (images.length > 1) {
+        setFile(null);
+        handleAddImages(images);
+        setBatchType("image");
+        setBatchMode(true);
+      } else {
+        handleAddImages(images);
+      }
+    } else {
+      if (batchMode && batchType === "image") {
+        toast({ message: t("printer.imageOnlyBatch"), type: "error" });
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+      if (batchMode) {
+        handleAddBatchFiles(docs);
+      } else if (docs.length > 1) {
+        setImageFiles([]);
+        setFile(null);
+        setBatchFiles(docs.slice(0, MAX_BATCH_FILES));
+        setBatchType("doc");
+        if (docs.length > MAX_BATCH_FILES) {
+          toast({
+            message: t("printer.batchFileLimitReached"),
+            type: "error",
+          });
+        }
+        setBatchMode(true);
+      } else {
+        setImageFiles([]);
+        setBatchFiles([]);
+        setBatchMode(false);
+        setFile(docs[0]);
+      }
+    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleReplaceImage = (index: number, newFile: File) => {
     if (!isImageFile(newFile)) {
-      if (imageFiles.length === 1 && isSupportedFile(newFile)) {
+      if (imageFiles.length === 1 && isSupportedFile(newFile) && !batchMode) {
         setImageFiles([]);
         setFile(newFile);
         return;
       }
-      toast({ message: t('printer.imageOnly'), type: 'error' });
+      toast({ message: t("printer.imageOnly"), type: "error" });
       return;
     }
     setImageFiles((prev) => prev.map((f, i) => (i === index ? newFile : f)));
@@ -497,7 +790,10 @@ function PrinterContent() {
   const handleDeleteImage = (index: number) => {
     setImageFiles((prev) => {
       const next = prev.filter((_, i) => i !== index);
-      if (next.length === 0) setFile(null);
+      if (next.length === 0) {
+        setFile(null);
+        if (batchMode) setBatchType(null);
+      }
       return next;
     });
   };
@@ -520,15 +816,15 @@ function PrinterContent() {
     const value = e.target.value;
     setFeishuUrl(value);
     if (value.trim() && !isValidFeishuUrl(value)) {
-      setFeishuUrlError(t('printer.feishuUrlInvalid'));
+      setFeishuUrlError(t("printer.feishuUrlInvalid"));
     } else {
-      setFeishuUrlError('');
+      setFeishuUrlError("");
     }
   };
 
   const dismissDocPickerGuide = () => {
     setShowDocPickerGuide(false);
-    localStorage.setItem('feishu_doc_picker_guide_seen', '1');
+    localStorage.setItem("feishu_doc_picker_guide_seen", "1");
   };
 
   const handleRefreshPreview = () => {
@@ -547,14 +843,14 @@ function PrinterContent() {
         const url = files[0].filePath;
         setFeishuUrl(url);
         if (!isValidFeishuUrl(url)) {
-          setFeishuUrlError(t('printer.feishuUrlInvalid'));
+          setFeishuUrlError(t("printer.feishuUrlInvalid"));
         } else {
-          setFeishuUrlError('');
+          setFeishuUrlError("");
         }
       },
       fail(err) {
         if (!/(cancel|denied|internal.?error)/i.test(err)) {
-          toast({ message: err, type: 'error' });
+          toast({ message: err, type: "error" });
         }
       },
       complete() {
@@ -563,14 +859,16 @@ function PrinterContent() {
     });
   };
 
-  const handleTabSwitch = (tab: 'file' | 'feishu') => {
+  const handleTabSwitch = (tab: "file" | "feishu") => {
     setSourceTab(tab);
-    if (tab === 'feishu') {
+    if (tab === "feishu") {
       setFile(null);
       setImageFiles([]);
+      setBatchFiles([]);
+      setBatchMode(false);
     } else {
-      setFeishuUrl('');
-      setFeishuUrlError('');
+      setFeishuUrl("");
+      setFeishuUrlError("");
       dismissDocPickerGuide();
     }
   };
@@ -590,16 +888,64 @@ function PrinterContent() {
     dragCounter.current = 0;
     setIsDragging(false);
     if (!e.dataTransfer.files?.length) return;
-    const first = e.dataTransfer.files[0];
-    if (isImageFile(first)) {
-      const images = Array.from(e.dataTransfer.files).filter(isImageFile);
-      handleAddImages(images);
-    } else {
-      if (isSupportedFile(first)) {
-        setImageFiles([]);
-        setFile(first);
+
+    const files = Array.from(e.dataTransfer.files);
+    const images = files.filter(isImageFile);
+    const docs = files.filter((f) => !isImageFile(f) && isSupportedFile(f));
+    const unsupported = files.filter(
+      (f) => !isImageFile(f) && !isSupportedFile(f),
+    );
+
+    if (unsupported.length > 0) {
+      rejectUnsupportedFile();
+      return;
+    }
+
+    const hasImages = images.length > 0;
+    const hasDocs = docs.length > 0;
+
+    if (hasImages && hasDocs) {
+      toast({ message: t("printer.mixedTypesRejected"), type: "error" });
+      return;
+    }
+
+    if (hasImages) {
+      if (batchMode && batchType === "doc") {
+        toast({ message: t("printer.docOnlyBatch"), type: "error" });
+        return;
+      }
+      if (batchMode) {
+        handleAddImages(images);
+      } else if (images.length > 1) {
+        setFile(null);
+        handleAddImages(images);
+        setBatchType("image");
+        setBatchMode(true);
       } else {
-        rejectUnsupportedFile();
+        handleAddImages(images);
+      }
+    } else {
+      if (batchMode && batchType === "image") {
+        toast({ message: t("printer.imageOnlyBatch"), type: "error" });
+        return;
+      }
+      if (batchMode) {
+        handleAddBatchFiles(docs);
+      } else if (docs.length > 1) {
+        setImageFiles([]);
+        setFile(null);
+        setBatchFiles(docs.slice(0, MAX_BATCH_FILES));
+        setBatchType("doc");
+        if (docs.length > MAX_BATCH_FILES) {
+          toast({
+            message: t("printer.batchFileLimitReached"),
+            type: "error",
+          });
+        }
+        setBatchMode(true);
+      } else {
+        setImageFiles([]);
+        setFile(docs[0]);
       }
     }
   };
@@ -607,31 +953,50 @@ function PrinterContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hasDocument) {
-      toast({ message: t('printer.tapToSelect'), type: 'error' });
+      toast({ message: t("printer.tapToSelect"), type: "error" });
       return;
     }
 
-    if (sourceTab === 'feishu' && !feishuUrl.trim()) {
-      toast({ message: t('printer.feishuUrlInvalid'), type: 'error' });
+    if (sourceTab === "feishu" && !feishuUrl.trim()) {
+      toast({ message: t("printer.feishuUrlInvalid"), type: "error" });
+      return;
+    }
+
+    if (batchMode) {
+      if (batchType === "image") {
+        await handleImageBatchSubmit();
+      } else {
+        await handleBatchSubmit();
+      }
       return;
     }
 
     setSubmitting(true);
     if (isInFeishu()) enableLeaveConfirm();
     try {
-      const { valid, error: validationError } = validatePageRange(pages, previewPageCount, true);
+      const { valid, error: validationError } = validatePageRange(
+        pages,
+        previewPageCount,
+        true,
+      );
       if (!valid) {
-        setPagesError(validationError);
-        toast({ message: validationError || t('printer.pageRangeInvalid'), type: 'error' });
+        toast({
+          message: validationError || t("printer.pageRangeInvalid"),
+          type: "error",
+        });
         setSubmitting(false);
         return;
       }
 
       let finalPages = pages.trim();
-      if (pageSet !== 'all') {
+      if (pageSet !== "all") {
         const maxPage = previewPageCount;
         if (!maxPage && !finalPages) {
-          toast({ message: t('printer.pageCountUnavailable') || 'Page count unavailable', type: 'error' });
+          toast({
+            message:
+              t("printer.pageCountUnavailable") || "Page count unavailable",
+            type: "error",
+          });
           setSubmitting(false);
           return;
         }
@@ -641,10 +1006,10 @@ function PrinterContent() {
           pagesList = Array.from({ length: maxPage }, (_, i) => i + 1);
         } else {
           const selectedPages = new Set<number>();
-          const parts = finalPages.split(',').map((p) => p.trim());
+          const parts = finalPages.split(",").map((p) => p.trim());
           for (const part of parts) {
-            if (part.includes('-')) {
-              const [start, end] = part.split('-').map(Number);
+            if (part.includes("-")) {
+              const [start, end] = part.split("-").map(Number);
               for (let i = start; i <= end; i++) selectedPages.add(i);
             } else if (part) {
               selectedPages.add(Number(part));
@@ -653,72 +1018,89 @@ function PrinterContent() {
           pagesList = Array.from(selectedPages).sort((a, b) => a - b);
         }
 
-        pagesList = pagesList.filter((p) => pageSet === 'odd' ? p % 2 !== 0 : p % 2 === 0);
-        finalPages = pagesList.join(',');
+        pagesList = pagesList.filter((p) =>
+          pageSet === "odd" ? p % 2 !== 0 : p % 2 === 0,
+        );
+        finalPages = pagesList.join(",");
 
         if (!finalPages) {
-          toast({ message: t('printer.pageRangeInvalid'), type: 'error' });
+          toast({ message: t("printer.pageRangeInvalid"), type: "error" });
           setSubmitting(false);
           return;
         }
       }
 
-      if (sourceTab === 'file' && file) {
+      if (sourceTab === "file" && file) {
         let fileToSubmit = file;
         const selectedForNup = nup > 1 ? getSelectedPages() : null;
         if (nup > 1) {
           try {
             fileToSubmit = new File(
-              [await createNupPdf(file, nup, nupDirection, selectedForNup ?? undefined, pageDimensions[0])],
-              file.name.replace(/\.[^.]+$/, '') + '_nup.pdf',
-              { type: 'application/pdf' },
+              [
+                await createNupPdf(
+                  file,
+                  nup,
+                  nupDirection,
+                  selectedForNup ?? undefined,
+                  pageDimensions[0],
+                ),
+              ],
+              file.name.replace(/\.[^.]+$/, "") + "_nup.pdf",
+              { type: "application/pdf" },
             );
           } catch {
-            toast({ message: t('printer.nupTransforming') + ' ' + t('error.submit'), type: 'error' });
+            toast({
+              message: t("printer.nupTransforming") + " " + t("error.submit"),
+              type: "error",
+            });
             setSubmitting(false);
             return;
           }
         }
 
         const formData = new FormData();
-        formData.append('printer_id', id || '');
-        formData.append('file', fileToSubmit);
+        formData.append("printer_id", id || "");
+        formData.append("file", fileToSubmit);
 
         const queryParams = new URLSearchParams();
-        queryParams.append('copies', copies.toString());
-        if (duplex !== 'off') {
-          queryParams.append('duplex', duplex);
+        queryParams.append("copies", copies.toString());
+        if (duplex !== "off") {
+          queryParams.append("duplex", duplex);
         }
-        queryParams.append('collate', collate);
+        queryParams.append("collate", collate);
         if (finalPages && nup === 1) {
-          queryParams.append('pages', finalPages);
+          queryParams.append("pages", finalPages);
         }
 
-        const response = await api.post(`/jobs?${queryParams.toString()}`, formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
+        const response = await api.post(
+          `/jobs?${queryParams.toString()}`,
+          formData,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
           },
-        });
+        );
 
         if (response.data.hook_url) {
           setManualDuplexHook({
             url: response.data.hook_url,
             expiresAt: response.data.hook_expires_at,
           });
-          toast({ message: t('printer.manualDuplexWait'), type: 'success' });
+          toast({ message: t("printer.manualDuplexWait"), type: "success" });
         } else {
-          toast({ message: t('printer.success'), type: 'success' });
+          toast({ message: t("printer.success"), type: "success" });
           setIsJobsModalOpen(true);
         }
       } else {
         const body: Record<string, unknown> = {
           url: feishuUrl.trim(),
-          printer_id: id || '',
+          printer_id: id || "",
           copies,
-          collate: collate === 'true',
+          collate: collate === "true",
         };
-        if (duplex !== 'off') {
-          body.duplex = duplex === 'true';
+        if (duplex !== "off") {
+          body.duplex = duplex === "true";
         }
         if (finalPages) {
           body.pages = finalPages;
@@ -728,27 +1110,187 @@ function PrinterContent() {
           body.nup_direction = nupDirection;
         }
 
-        const response = await api.post('/jobs/feishu', body);
+        const response = await api.post("/jobs/feishu", body);
 
         if (response.data.hook_url) {
           setManualDuplexHook({
             url: response.data.hook_url,
             expiresAt: response.data.hook_expires_at,
           });
-          toast({ message: t('printer.manualDuplexWait'), type: 'success' });
+          toast({ message: t("printer.manualDuplexWait"), type: "success" });
         } else {
-          toast({ message: t('printer.success'), type: 'success' });
+          toast({ message: t("printer.success"), type: "success" });
           setIsJobsModalOpen(true);
         }
       }
-
     } catch (err: unknown) {
-      const errStatus = (err as { response?: { status?: number } }).response?.status;
-      const fallback = errStatus === 403 ? t('printer.feishuForbidden') : t('error.submit');
-      toast({ message: `${t('error.submit')}: ${apiErrMsg(err, fallback)}`, type: 'error' });
+      const errStatus = (err as { response?: { status?: number } }).response
+        ?.status;
+      const fallback =
+        errStatus === 403 ? t("printer.feishuForbidden") : t("error.submit");
+      toast({
+        message: `${t("error.submit")}: ${apiErrMsg(err, fallback)}`,
+        type: "error",
+      });
     } finally {
       setSubmitting(false);
       if (isInFeishu()) disableLeaveConfirm();
+    }
+  };
+
+  const handleImageBatchSubmit = async () => {
+    if (imageFiles.length === 0) {
+      toast({ message: t("printer.tapToSelect"), type: "error" });
+      return;
+    }
+
+    setSubmitting(true);
+    if (isInFeishu()) enableLeaveConfirm();
+    try {
+      const blob = await imagesToPdf(imageFiles);
+      let fileToSubmit = new File([blob], "images.pdf", {
+        type: "application/pdf",
+      });
+
+      if (nup > 1) {
+        fileToSubmit = new File(
+          [await createNupPdf(fileToSubmit, nup, nupDirection)],
+          "images_nup.pdf",
+          { type: "application/pdf" },
+        );
+      }
+
+      const formData = new FormData();
+      formData.append("printer_id", id || "");
+      formData.append("file", fileToSubmit);
+
+      const queryParams = new URLSearchParams();
+      queryParams.append("copies", copies.toString());
+      if (duplex !== "off") {
+        queryParams.append("duplex", duplex);
+      }
+      queryParams.append("collate", collate);
+
+      await api.post(`/jobs?${queryParams.toString()}`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      toast({ message: t("printer.success"), type: "success" });
+      setIsJobsModalOpen(true);
+    } catch (err: unknown) {
+      toast({
+        message: `${t("error.submit")}: ${apiErrMsg(err, t("error.submit"))}`,
+        type: "error",
+      });
+    } finally {
+      setSubmitting(false);
+      if (isInFeishu()) disableLeaveConfirm();
+    }
+  };
+
+  const handleBatchSubmit = async () => {
+    if (batchFiles.length === 0) {
+      toast({ message: t("printer.tapToSelect"), type: "error" });
+      return;
+    }
+
+    let finalPages = pages.trim();
+    if (pageSet !== "all") {
+      const maxPage = previewPageCount;
+      let pagesList: number[] = [];
+      if (!finalPages && maxPage) {
+        pagesList = Array.from({ length: maxPage }, (_, i) => i + 1);
+      } else if (finalPages) {
+        const selectedPages = new Set<number>();
+        const parts = finalPages.split(",").map((p) => p.trim());
+        for (const part of parts) {
+          if (part.includes("-")) {
+            const [start, end] = part.split("-").map(Number);
+            for (let p = start; p <= end; p++) selectedPages.add(p);
+          } else if (part) {
+            selectedPages.add(Number(part));
+          }
+        }
+        pagesList = Array.from(selectedPages).sort((a, b) => a - b);
+      }
+      pagesList = pagesList.filter((p) =>
+        pageSet === "odd" ? p % 2 !== 0 : p % 2 === 0,
+      );
+      finalPages = pagesList.join(",");
+    }
+
+    setSubmitting(true);
+    if (isInFeishu()) enableLeaveConfirm();
+
+    let successCount = 0;
+    let failCount = 0;
+
+    let filesToSubmit: File[] = batchFiles;
+    if (nup > 1) {
+      const nupBlobs = await Promise.all(
+        batchFiles.map((f) => createNupPdf(f, nup, nupDirection)),
+      );
+      filesToSubmit = nupBlobs.map(
+        (blob, i) =>
+          new File(
+            [blob],
+            batchFiles[i].name.replace(/\.[^.]+$/, "") + "_nup.pdf",
+            { type: "application/pdf" },
+          ),
+      );
+    }
+
+    for (let i = 0; i < batchFiles.length; i++) {
+      setBatchProgress({ current: i + 1, total: batchFiles.length });
+
+      try {
+        const fileToSubmit = filesToSubmit[i];
+
+        const formData = new FormData();
+        formData.append("printer_id", id || "");
+        formData.append("file", fileToSubmit);
+
+        const queryParams = new URLSearchParams();
+        queryParams.append("copies", copies.toString());
+        if (duplex !== "off") {
+          queryParams.append("duplex", duplex);
+        }
+        queryParams.append("collate", collate);
+        if (finalPages) {
+          queryParams.append("pages", finalPages);
+        }
+
+        await api.post(`/jobs?${queryParams.toString()}`, formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+
+        successCount++;
+      } catch {
+        failCount++;
+      }
+    }
+
+    setSubmitting(false);
+    setBatchProgress(null);
+    if (isInFeishu()) disableLeaveConfirm();
+
+    if (failCount === 0) {
+      toast({
+        message: t("printer.batchSuccess", { count: successCount }),
+        type: "success",
+      });
+      setIsJobsModalOpen(true);
+    } else if (successCount === 0) {
+      toast({ message: t("printer.batchAllFailed"), type: "error" });
+    } else {
+      toast({
+        message: t("printer.batchPartialSuccess", {
+          success: successCount,
+          total: batchFiles.length,
+          failed: failCount,
+        }),
+        type: "error",
+      });
     }
   };
 
@@ -758,11 +1300,14 @@ function PrinterContent() {
     if (isInFeishu()) enableLeaveConfirm();
     try {
       await api.post(manualDuplexHook.url);
-      toast({ message: t('printer.success'), type: 'success' });
+      toast({ message: t("printer.success"), type: "success" });
       setManualDuplexHook(null);
       setIsJobsModalOpen(true);
     } catch (err: unknown) {
-      toast({ message: `${t('error.submit')}: ${apiErrMsg(err, t('error.submit'))}`, type: 'error' });
+      toast({
+        message: `${t("error.submit")}: ${apiErrMsg(err, t("error.submit"))}`,
+        type: "error",
+      });
     } finally {
       setSubmittingDuplex(false);
       if (isInFeishu()) disableLeaveConfirm();
@@ -773,8 +1318,8 @@ function PrinterContent() {
     if (!manualDuplexHook) return;
     setSubmittingDuplex(true);
     try {
-      await api.post(manualDuplexHook.url.replace('/continue', '/cancel'));
-      toast({ message: t('printer.duplexCancelled'), type: 'success' });
+      await api.post(manualDuplexHook.url.replace("/continue", "/cancel"));
+      toast({ message: t("printer.duplexCancelled"), type: "success" });
     } catch {
       // Ignored
     } finally {
@@ -786,9 +1331,13 @@ function PrinterContent() {
 
   const handleDownloadPreview = () => {
     if (!previewPdfUrl) return;
-    const filename = file
-      ? `${file.name.replace(/\.[^.]+$/, '')}.pdf`
-      : 'feishu-document.pdf';
+    const selectedIdx = Math.min(previewIndex, batchFiles.length - 1);
+    const filename =
+      batchMode && batchFiles[selectedIdx]
+        ? `${batchFiles[selectedIdx].name.replace(/\.[^.]+$/, "")}.pdf`
+        : file
+          ? `${file.name.replace(/\.[^.]+$/, "")}.pdf`
+          : "feishu-document.pdf";
     downloadFile(previewPdfUrl, filename);
   };
 
@@ -804,12 +1353,12 @@ function PrinterContent() {
     return (
       <div className="p-4 max-w-2xl mx-auto mt-8">
         <div className="bg-red-50 text-red-700 p-4 rounded-xl border border-red-100">
-          <p className="font-medium">{error || t('home.noPrinters')}</p>
+          <p className="font-medium">{error || t("home.noPrinters")}</p>
           <button
-            onClick={() => router('/')}
+            onClick={() => router("/")}
             className="mt-3 text-sm underline hover:text-red-800"
           >
-            ← {t('printer.back')}
+            ← {t("printer.back")}
           </button>
         </div>
       </div>
@@ -819,23 +1368,47 @@ function PrinterContent() {
   if (!id) {
     return (
       <>
-        {isJobsModalOpen && <JobsModal onClose={() => setIsJobsModalOpen(false)} />}
+        {isJobsModalOpen && (
+          <JobsModal onClose={() => setIsJobsModalOpen(false)} />
+        )}
         <PrinterList onJobsClick={() => setIsJobsModalOpen(true)} />
       </>
     );
   }
 
-  const submitBtnDisabled = !hasDocument || submitting || duplex === '' || merging || previewLoading;
+  const submitBtnDisabled =
+    !hasDocument ||
+    submitting ||
+    duplex === "" ||
+    (batchMode ? false : merging) ||
+    (batchMode ? false : previewLoading);
 
-  const submitBtnClass = `w-full flex justify-center items-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-base font-medium text-white transition-all ${submitBtnDisabled
-      ? 'bg-blue-300 cursor-not-allowed'
-      : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 hover:shadow'
-    }`;
+  const submitBtnClass = `w-full flex justify-center items-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-base font-medium text-white transition-all ${
+    submitBtnDisabled
+      ? "bg-blue-300 cursor-not-allowed"
+      : "bg-blue-600 hover:bg-blue-700 active:bg-blue-800 hover:shadow"
+  }`;
 
   const submitBtnContent = submitting ? (
-    <><Loader2 className="w-5 h-5 mr-2 animate-spin" />{t('printer.submitting')}</>
+    batchType === "doc" && batchProgress ? (
+      <>
+        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+        {t("printer.submittingBatch", {
+          current: batchProgress.current,
+          total: batchProgress.total,
+        })}
+      </>
+    ) : (
+      <>
+        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+        {t("printer.submitting")}
+      </>
+    )
   ) : (
-    <><PrinterIcon className="w-5 h-5 mr-2" />{t('printer.submit')}</>
+    <>
+      <PrinterIcon className="w-5 h-5 mr-2" />
+      {t("printer.submit")}
+    </>
   );
 
   return (
@@ -847,14 +1420,21 @@ function PrinterContent() {
               <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
                 <PrinterIcon className="w-6 h-6 text-blue-600" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">{t('printer.manualDuplexTitle')}</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">
+                {t("printer.manualDuplexTitle")}
+              </h3>
               <p className="text-gray-600 text-center mb-4">
-                {t('printer.manualDuplexDesc')}
+                {t("printer.manualDuplexDesc")}
               </p>
               {timeLeft !== null && (
                 <div className="text-sm font-medium text-orange-600 mb-6 bg-orange-50 px-3 py-1 rounded-full text-center flex items-center justify-center space-x-2">
-                  <span>{t('printer.timeLeft')}</span>
-                  <span>{Math.max(0, Math.floor(timeLeft / 1000 / 60))}:{Math.max(0, Math.floor(timeLeft / 1000 % 60)).toString().padStart(2, '0')}</span>
+                  <span>{t("printer.timeLeft")}</span>
+                  <span>
+                    {Math.max(0, Math.floor(timeLeft / 1000 / 60))}:
+                    {Math.max(0, Math.floor((timeLeft / 1000) % 60))
+                      .toString()
+                      .padStart(2, "0")}
+                  </span>
                 </div>
               )}
               <div className="flex w-full space-x-3">
@@ -863,31 +1443,40 @@ function PrinterContent() {
                   disabled={submittingDuplex}
                   className="flex-1 py-3 px-4 rounded-xl border border-gray-300 font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 transition-colors disabled:opacity-50"
                 >
-                  {t('common.cancel')}
+                  {t("common.cancel")}
                 </button>
                 <button
                   onClick={handleContinueDuplex}
                   disabled={submittingDuplex}
                   className="flex-1 py-3 px-4 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors disabled:opacity-50 flex items-center justify-center"
                 >
-                  {submittingDuplex ? <Loader2 className="w-5 h-5 animate-spin" /> : t('common.continue')}
+                  {submittingDuplex ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    t("common.continue")
+                  )}
                 </button>
               </div>
             </div>
           </div>
         )}
-        {isJobsModalOpen && <JobsModal onClose={() => setIsJobsModalOpen(false)} />}
+        {isJobsModalOpen && (
+          <JobsModal onClose={() => setIsJobsModalOpen(false)} />
+        )}
         <div className="flex justify-between items-center mb-4 shrink-0">
-          <Link to="/printers" className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">
+          <Link
+            to="/printers"
+            className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors"
+          >
             <ChevronLeft className="w-4 h-4 mr-1" />
-            {t('printer.back')}
+            {t("printer.back")}
           </Link>
           <button
             onClick={() => setIsJobsModalOpen(true)}
             className="inline-flex items-center text-sm font-medium text-gray-700 bg-white border border-gray-200 shadow-sm hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 px-4 py-2 rounded-lg transition-all"
           >
             <ClipboardList className="w-4 h-4 mr-2" />
-            {t('nav.history')}
+            {t("nav.history")}
           </button>
         </div>
 
@@ -897,52 +1486,95 @@ function PrinterContent() {
               <PrinterIcon className="w-8 h-8 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">{printer?.name}</h1>
-              <p className="text-gray-500 mt-1">{printer?.location} &bull; {printer?.model}</p>
-              {printer?.description && <p className="text-sm text-gray-400 mt-2">{printer.description}</p>}
+              <h1 className="text-2xl font-bold text-gray-900">
+                {printer?.name}
+              </h1>
+              <p className="text-gray-500 mt-1">
+                {printer?.location} &bull; {printer?.model}
+              </p>
+              {printer?.description && (
+                <p className="text-sm text-gray-400 mt-2">
+                  {printer.description}
+                </p>
+              )}
             </div>
           </div>
         </div>
 
-        <form id="print-form" onSubmit={handleSubmit} className="flex flex-col lg:flex-row gap-6 items-start">
+        <form
+          id="print-form"
+          onSubmit={handleSubmit}
+          className="flex flex-col lg:flex-row gap-6 items-start"
+        >
           <div className="w-full lg:w-1/2 flex flex-col">
             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex flex-col">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4 shrink-0 flex items-center gap-2"><Settings className="w-5 h-5 text-gray-400" />{t('printer.document')}</h2>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 shrink-0 flex items-center gap-2">
+                <Settings className="w-5 h-5 text-gray-400" />
+                {t("printer.document")}
+              </h2>
 
               <div className="flex flex-col flex-1 min-h-0">
                 <div className="flex border-b border-gray-200 mb-4 shrink-0">
                   <button
                     type="button"
-                    onClick={() => handleTabSwitch('file')}
-                    className={`flex-1 py-2.5 text-sm font-medium text-center border-b-2 transition-colors flex items-center justify-center gap-1.5 ${sourceTab === 'file'
-                        ? 'border-blue-600 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }`}
+                    onClick={() => handleTabSwitch("file")}
+                    className={`flex-1 py-2.5 text-sm font-medium text-center border-b-2 transition-colors flex items-center justify-center gap-1.5 ${
+                      sourceTab === "file"
+                        ? "border-blue-600 text-blue-600"
+                        : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                    }`}
                   >
                     <Upload className="w-4 h-4" />
-                    {t('printer.tabUploadFile')}
+                    {t("printer.tabUploadFile")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleTabSwitch('feishu')}
-                    className={`flex-1 py-2.5 text-sm font-medium text-center border-b-2 transition-colors flex items-center justify-center gap-1.5 ${sourceTab === 'feishu'
-                        ? 'border-blue-600 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }`}
+                    onClick={() => handleTabSwitch("feishu")}
+                    className={`flex-1 py-2.5 text-sm font-medium text-center border-b-2 transition-colors flex items-center justify-center gap-1.5 ${
+                      sourceTab === "feishu"
+                        ? "border-blue-600 text-blue-600"
+                        : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                    }`}
                   >
                     <span className="w-4 h-4 bg-current [mask-image:url(/feishu-logo.svg)] [mask-size:contain] [mask-repeat:no-repeat] [mask-position:center]" />
-                    {t('printer.tabFeishu')}
+                    {t("printer.tabFeishu")}
                   </button>
                 </div>
 
-                {sourceTab === 'file' ? (
+                {sourceTab === "file" ? (
                   <>
-                    <label className="block text-sm font-medium text-gray-700 mb-2 shrink-0">
-                      {t('printer.selectFile')} <span className="text-red-500">*</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-2 shrink-0">
+                      <label className="text-sm font-medium text-gray-700">
+                        {t("printer.selectFile")}{" "}
+                        <span className="text-red-500">*</span>
+                      </label>
+                      <div className="flex items-center gap-3">
+                        {batchMode && (
+                          <button
+                            type="button"
+                            onClick={clearBatchFiles}
+                            className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                          >
+                            {t("common.clear")}
+                          </button>
+                        )}
+                        <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                          <span className="text-xs text-gray-500">
+                            {t("printer.batchToggle")}
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={batchMode}
+                            onChange={toggleBatchMode}
+                            className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                          />
+                        </label>
+                      </div>
+                    </div>
 
-                    {imageFiles.length > 0 ? (
-                      <ImageFileList
+                    {batchType === "image" ? (
+                      <BatchFileList
+                        batchType="image"
                         files={imageFiles}
                         onReorder={setImageFiles}
                         onReplace={handleReplaceImage}
@@ -951,10 +1583,36 @@ function PrinterContent() {
                         limitReached={imageFiles.length >= MAX_IMAGES}
                         allowDocReplace={imageFiles.length === 1}
                       />
+                    ) : batchType === "doc" ? (
+                      <BatchFileList
+                        batchType="doc"
+                        files={batchFiles}
+                        onReorder={setBatchFiles}
+                        onReplace={handleReplaceBatchFile}
+                        onDelete={handleDeleteBatchFile}
+                        onAdd={handleAddBatchFiles}
+                        limitReached={batchFiles.length >= MAX_BATCH_FILES}
+                        accept={acceptValue}
+                        supportedExts={supportedFileTypes}
+                        selectedIndex={previewIndex}
+                        onSelect={setPreviewIndex}
+                      />
+                    ) : batchMode ? (
+                      <BatchFileList
+                        batchType={null}
+                        files={[]}
+                        onReorder={() => {}}
+                        onReplace={() => {}}
+                        onDelete={() => {}}
+                        onAdd={handleBatchAdd}
+                        limitReached={false}
+                        accept={acceptValue}
+                        supportedExts={supportedFileTypes}
+                      />
                     ) : (
                       <div
                         className={`group border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer
-                        ${isDragging ? 'border-blue-500 bg-blue-50' : file ? 'border-green-300 bg-green-50 hover:border-blue-400 hover:bg-blue-50' : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50 bg-gray-50'}`}
+                        ${isDragging ? "border-blue-500 bg-blue-50" : file ? "border-green-300 bg-green-50 hover:border-blue-400 hover:bg-blue-50" : "border-gray-300 hover:border-blue-400 hover:bg-blue-50 bg-gray-50"}`}
                         onClick={() => fileInputRef.current?.click()}
                         onDragEnter={handleDragEnter}
                         onDragOver={handleDragOver}
@@ -971,21 +1629,46 @@ function PrinterContent() {
                         />
                         {file ? (
                           <div className="flex flex-col items-center pointer-events-none">
-                            <FileText className={`w-10 h-10 mb-3 transition-colors ${isDragging ? 'text-blue-500' : 'text-green-600 group-hover:text-blue-500'}`} />
-                            <span className={`font-medium transition-colors ${isDragging ? 'text-blue-700' : 'text-green-800 group-hover:text-blue-700'}`}>{file.name}</span>
-                            <span className={`text-xs mt-1 transition-colors ${isDragging ? 'text-blue-600' : 'text-green-600 group-hover:text-blue-600'}`}>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
-                            <button type="button" className={`mt-3 text-xs underline pointer-events-auto transition-colors ${isDragging ? 'text-blue-600' : 'text-green-600 group-hover:text-blue-600'}`} onClick={(e) => {
-                              e.stopPropagation();
-                              setFile(null);
-                              setPreviewVersion(0);
-                              if (fileInputRef.current) fileInputRef.current.value = '';
-                            }}>{t('printer.changeFile')}</button>
+                            <FileText
+                              className={`w-10 h-10 mb-3 transition-colors ${isDragging ? "text-blue-500" : "text-green-600 group-hover:text-blue-500"}`}
+                            />
+                            <span
+                              className={`font-medium transition-colors ${isDragging ? "text-blue-700" : "text-green-800 group-hover:text-blue-700"}`}
+                            >
+                              {file.name}
+                            </span>
+                            <span
+                              className={`text-xs mt-1 transition-colors ${isDragging ? "text-blue-600" : "text-green-600 group-hover:text-blue-600"}`}
+                            >
+                              {(file.size / 1024 / 1024).toFixed(2)} MB
+                            </span>
+                            <button
+                              type="button"
+                              className={`mt-3 text-xs underline pointer-events-auto transition-colors ${isDragging ? "text-blue-600" : "text-green-600 group-hover:text-blue-600"}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setFile(null);
+                                setPreviewVersion(0);
+                                if (fileInputRef.current)
+                                  fileInputRef.current.value = "";
+                              }}
+                            >
+                              {t("printer.changeFile")}
+                            </button>
                           </div>
                         ) : (
                           <div className="flex flex-col items-center pointer-events-none">
-                            <UploadCloud className={`w-10 h-10 mb-3 transition-colors ${isDragging ? 'text-blue-500' : 'text-gray-400 group-hover:text-blue-500'}`} />
-                            <span className={`font-medium transition-colors ${isDragging ? 'text-blue-600' : 'text-gray-600 group-hover:text-blue-600'}`}>{t('printer.tapToSelectWithTypes')}</span>
-                            <span className="text-xs text-gray-400 mt-1">{supportedTypesText}</span>
+                            <UploadCloud
+                              className={`w-10 h-10 mb-3 transition-colors ${isDragging ? "text-blue-500" : "text-gray-400 group-hover:text-blue-500"}`}
+                            />
+                            <span
+                              className={`font-medium transition-colors ${isDragging ? "text-blue-600" : "text-gray-600 group-hover:text-blue-600"}`}
+                            >
+                              {t("printer.tapToSelectWithTypes")}
+                            </span>
+                            <span className="text-xs text-gray-400 mt-1">
+                              {supportedTypesText}
+                            </span>
                           </div>
                         )}
                       </div>
@@ -995,88 +1678,116 @@ function PrinterContent() {
                   <>
                     <div className="flex items-center gap-2 mb-2 shrink-0">
                       <label className="text-sm font-medium text-gray-700">
-                        {t('printer.feishuUrlLabel')} <span className="text-red-500">*</span>
+                        {t("printer.feishuUrlLabel")}{" "}
+                        <span className="text-red-500">*</span>
                       </label>
                       {feishuUrl && (
                         <button
                           type="button"
                           onClick={handleRefreshPreview}
                           disabled={previewLoading}
-                          aria-label={t('printer.refreshPreview')}
+                          aria-label={t("printer.refreshPreview")}
                           className="ml-auto inline-flex items-center justify-center w-8 h-8 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <RefreshCw className={`w-4 h-4 ${previewLoading ? 'animate-spin' : ''}`} />
+                          <RefreshCw
+                            className={`w-4 h-4 ${previewLoading ? "animate-spin" : ""}`}
+                          />
                         </button>
                       )}
                     </div>
                     <div className="relative">
-                        <input
-                          type="url"
-                          value={feishuUrl}
-                          onChange={handleFeishuUrlChange}
-                          placeholder={t('printer.feishuUrlPlaceholder')}
-                          className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:outline-none transition-shadow ${isInFeishu() && feishuUrl ? 'pr-20' : 'pr-12'} ${feishuUrlError
-                              ? 'border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50'
-                              : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
-                            }`}
-                        />
-                        {isInFeishu() && showDocPickerGuide && (
-                          <div
-                            className={`absolute z-10 animate-fade-in flex items-center ${feishuUrl ? 'right-20' : 'right-12'}`}
-                            style={{ top: '50%', transform: 'translateY(-50%)' }}
-                          >
-                            <div className="bg-gray-800 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap flex items-center gap-2">
-                              {t('printer.feishuDocPickerGuide')}
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); dismissDocPickerGuide(); }}
-                                className="text-gray-400 hover:text-white transition-colors"
-                                aria-label="Close"
+                      <input
+                        type="url"
+                        value={feishuUrl}
+                        onChange={handleFeishuUrlChange}
+                        placeholder={t("printer.feishuUrlPlaceholder")}
+                        className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:outline-none transition-shadow ${isInFeishu() && feishuUrl ? "pr-20" : "pr-12"} ${
+                          feishuUrlError
+                            ? "border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50"
+                            : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                        }`}
+                      />
+                      {isInFeishu() && showDocPickerGuide && (
+                        <div
+                          className={`absolute z-10 animate-fade-in flex items-center ${feishuUrl ? "right-20" : "right-12"}`}
+                          style={{ top: "50%", transform: "translateY(-50%)" }}
+                        >
+                          <div className="bg-gray-800 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap flex items-center gap-2">
+                            {t("printer.feishuDocPickerGuide")}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                dismissDocPickerGuide();
+                              }}
+                              className="text-gray-400 hover:text-white transition-colors"
+                              aria-label="Close"
+                            >
+                              <svg
+                                width="12"
+                                height="12"
+                                viewBox="0 0 16 16"
+                                fill="none"
                               >
-                                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4.22 4.22a.75.75 0 0 1 1.06 0L8 6.94l2.72-2.72a.75.75 0 1 1 1.06 1.06L9.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L8 9.06l-2.72 2.72a.75.75 0 1 1-1.06-1.06L6.94 8 4.22 5.28a.75.75 0 0 1 0-1.06z" fill="currentColor"/></svg>
-                              </button>
-                            </div>
-                            <div className="w-0 h-0 border-t-4 border-b-4 border-l-4 border-t-transparent border-b-transparent border-l-gray-800" />
+                                <path
+                                  d="M4.22 4.22a.75.75 0 0 1 1.06 0L8 6.94l2.72-2.72a.75.75 0 1 1 1.06 1.06L9.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L8 9.06l-2.72 2.72a.75.75 0 1 1-1.06-1.06L6.94 8 4.22 5.28a.75.75 0 0 1 0-1.06z"
+                                  fill="currentColor"
+                                />
+                              </svg>
+                            </button>
                           </div>
-                        )}
-                        {isInFeishu() && (
-                          <button
-                            type="button"
-                            onClick={handleOpenDocPicker}
-                            disabled={pickerLoading || previewLoading}
-                            aria-label={t('printer.feishuPickDoc')}
-                            className={`absolute flex items-center justify-center w-7 h-7 rounded-full transition-colors text-blue-500 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed ${feishuUrl ? 'right-10' : 'right-2'}`}
-                            style={{ top: '50%', transform: 'translateY(-50%)' }}
+                          <div className="w-0 h-0 border-t-4 border-b-4 border-l-4 border-t-transparent border-b-transparent border-l-gray-800" />
+                        </div>
+                      )}
+                      {isInFeishu() && (
+                        <button
+                          type="button"
+                          onClick={handleOpenDocPicker}
+                          disabled={pickerLoading || previewLoading}
+                          aria-label={t("printer.feishuPickDoc")}
+                          className={`absolute flex items-center justify-center w-7 h-7 rounded-full transition-colors text-blue-500 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed ${feishuUrl ? "right-10" : "right-2"}`}
+                          style={{ top: "50%", transform: "translateY(-50%)" }}
+                        >
+                          {pickerLoading ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <FolderOpen className="w-4 h-4" />
+                          )}
+                        </button>
+                      )}
+                      {feishuUrl && (
+                        <button
+                          type="button"
+                          aria-label={t("common.clear") || "Clear"}
+                          className="absolute right-2 flex items-center justify-center w-7 h-7 rounded-full transition-colors text-gray-400 hover:bg-red-500/70 hover:text-white"
+                          style={{ top: "50%", transform: "translateY(-50%)" }}
+                          onClick={() => setFeishuUrl("")}
+                          tabIndex={-1}
+                        >
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
                           >
-                            {pickerLoading ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <FolderOpen className="w-4 h-4" />
-                            )}
-                          </button>
-                        )}
-                        {feishuUrl && (
-                          <button
-                            type="button"
-                            aria-label={t('common.clear') || 'Clear'}
-                            className="absolute right-2 flex items-center justify-center w-7 h-7 rounded-full transition-colors text-gray-400 hover:bg-red-500/70 hover:text-white"
-                            style={{ top: '50%', transform: 'translateY(-50%)' }}
-                            onClick={() => setFeishuUrl('')}
-                            tabIndex={-1}
-                          >
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M4.22 4.22a.75.75 0 0 1 1.06 0L8 6.94l2.72-2.72a.75.75 0 1 1 1.06 1.06L9.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L8 9.06l-2.72 2.72a.75.75 0 1 1-1.06-1.06L6.94 8 4.22 5.28a.75.75 0 0 1 0-1.06z" fill="currentColor"/>
-                            </svg>
-                          </button>
-                        )}
-                      </div>
+                            <path
+                              d="M4.22 4.22a.75.75 0 0 1 1.06 0L8 6.94l2.72-2.72a.75.75 0 1 1 1.06 1.06L9.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L8 9.06l-2.72 2.72a.75.75 0 1 1-1.06-1.06L6.94 8 4.22 5.28a.75.75 0 0 1 0-1.06z"
+                              fill="currentColor"
+                            />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
                     {feishuUrlError && (
-                      <p className="mt-1 text-xs text-red-600">{feishuUrlError}</p>
+                      <p className="mt-1 text-xs text-red-600">
+                        {feishuUrlError}
+                      </p>
                     )}
-                    {previewLoading && sourceTab === 'feishu' && (
+                    {previewLoading && sourceTab === "feishu" && (
                       <p className="mt-2 text-xs text-gray-500 flex items-center">
                         <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                        {t('printer.feishuPreviewLoading')}
+                        {t("printer.feishuPreviewLoading")}
                       </p>
                     )}
                   </>
@@ -1085,7 +1796,9 @@ function PrinterContent() {
 
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 mt-6 shrink-0">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.copies')}</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    {t("printer.copies")}
+                  </label>
                   <input
                     type="number"
                     min="1"
@@ -1097,11 +1810,19 @@ function PrinterContent() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.collate')}</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    {t("printer.collate")}
+                  </label>
                   <Select
                     options={[
-                      { value: 'true', label: `${t('printer.yes')} (1,2,3...1,2,3)` },
-                      { value: 'false', label: `${t('printer.no')} (1,1...2,2...)` },
+                      {
+                        value: "true",
+                        label: `${t("printer.yes")} (1,2,3...1,2,3)`,
+                      },
+                      {
+                        value: "false",
+                        label: `${t("printer.no")} (1,1...2,2...)`,
+                      },
                     ]}
                     value={collate}
                     onChange={setCollate}
@@ -1110,12 +1831,23 @@ function PrinterContent() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.pageSet') || 'Page Set'}</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    {t("printer.pageSet") || "Page Set"}
+                  </label>
                   <Select
                     options={[
-                      { value: 'all', label: t('printer.pageSetAll') || 'All Pages' },
-                      { value: 'odd', label: t('printer.pageSetOdd') || 'Odd Pages' },
-                      { value: 'even', label: t('printer.pageSetEven') || 'Even Pages' },
+                      {
+                        value: "all",
+                        label: t("printer.pageSetAll") || "All Pages",
+                      },
+                      {
+                        value: "odd",
+                        label: t("printer.pageSetOdd") || "Odd Pages",
+                      },
+                      {
+                        value: "even",
+                        label: t("printer.pageSetEven") || "Even Pages",
+                      },
                     ]}
                     value={pageSet}
                     onChange={setPageSet}
@@ -1125,28 +1857,37 @@ function PrinterContent() {
               </div>
 
               <div className="mt-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.pageRange')}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {t("printer.pageRange")}
+                </label>
                 <input
                   type="text"
                   value={pages}
                   onChange={handlePagesChange}
-                  placeholder={t('printer.pageRangePlaceholder')}
-                  className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:outline-none transition-shadow ${pagesError
-                    ? 'border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50'
-                    : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
-                    }`}
+                  placeholder={t("printer.pageRangePlaceholder")}
+                  className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:outline-none transition-shadow ${
+                    pagesError
+                      ? "border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50"
+                      : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                  }`}
                 />
                 {pagesError && (
                   <p className="mt-1 text-xs text-red-600">{pagesError}</p>
                 )}
                 {previewPageCount && (
-                  <p className="mt-1 text-xs text-gray-500">{t('printer.totalPages', { count: previewPageCount })}</p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {t("printer.totalPages", { count: previewPageCount })}
+                  </p>
                 )}
-                <p className="mt-1 text-xs text-gray-500">{t('printer.pageRangeHelp')}</p>
+                <p className="mt-1 text-xs text-gray-500">
+                  {t("printer.pageRangeHelp")}
+                </p>
               </div>
 
               <div className="mt-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.nup')}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {t("printer.nup")}
+                </label>
                 <div className="flex gap-3">
                   {([1, 2, 4, 6] as const).map((val) => {
                     const cols = val === 6 ? 3 : val === 1 ? 1 : 2;
@@ -1155,8 +1896,9 @@ function PrinterContent() {
                     return (
                       <label
                         key={val}
-                        className={`flex-1 flex flex-col items-center py-3 px-2 border rounded-xl cursor-pointer transition-all ${isNupDisabled ? 'opacity-50 cursor-not-allowed' : ''
-                          } ${selected ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-gray-200 hover:bg-gray-50 hover:border-gray-300'}`}
+                        className={`flex-1 flex flex-col items-center py-3 px-2 border rounded-xl cursor-pointer transition-all ${
+                          isNupDisabled ? "opacity-50 cursor-not-allowed" : ""
+                        } ${selected ? "border-blue-500 bg-blue-50 shadow-sm" : "border-gray-200 hover:bg-gray-50 hover:border-gray-300"}`}
                       >
                         <input
                           type="radio"
@@ -1167,97 +1909,175 @@ function PrinterContent() {
                           disabled={isNupDisabled}
                           className="sr-only"
                         />
-                        <svg width="40" height="52" viewBox="0 0 40 52" className="mb-1.5">
-                          <rect x="1" y="1" width="38" height="50" rx="2.5" fill="white" stroke={selected ? '#3b82f6' : '#d1d5db'} strokeWidth="1.2" />
+                        <svg
+                          width="40"
+                          height="52"
+                          viewBox="0 0 40 52"
+                          className="mb-1.5"
+                        >
+                          <rect
+                            x="1"
+                            y="1"
+                            width="38"
+                            height="50"
+                            rx="2.5"
+                            fill="white"
+                            stroke={selected ? "#3b82f6" : "#d1d5db"}
+                            strokeWidth="1.2"
+                          />
                           {val === 1 ? (
-                            <rect x="4" y="4" width="32" height="44" rx="1" fill={selected ? '#dbeafe' : '#f3f4f6'} />
+                            <rect
+                              x="4"
+                              y="4"
+                              width="32"
+                              height="44"
+                              rx="1"
+                              fill={selected ? "#dbeafe" : "#f3f4f6"}
+                            />
                           ) : (
                             <>
-                              {cols > 1 && Array.from({ length: cols - 1 }).map((_, i) => (
-                                <line key={`v-${i}`} x1={1 + (i + 1) * 38 / cols} y1="1" x2={1 + (i + 1) * 38 / cols} y2="51" stroke={selected ? '#93c5fd' : '#e5e7eb'} strokeWidth="0.6" />
-                              ))}
-                              {rows > 1 && Array.from({ length: rows - 1 }).map((_, i) => (
-                                <line key={`h-${i}`} x1="1" y1={1 + (i + 1) * 50 / rows} x2="39" y2={1 + (i + 1) * 50 / rows} stroke={selected ? '#93c5fd' : '#e5e7eb'} strokeWidth="0.6" />
-                              ))}
-                              <rect x="1.5" y="1.5" width={38 / cols - 2} height={50 / rows - 2} rx="1" fill={selected ? '#dbeafe' : '#f3f4f6'} />
+                              {cols > 1 &&
+                                Array.from({ length: cols - 1 }).map((_, i) => (
+                                  <line
+                                    key={`v-${i}`}
+                                    x1={1 + ((i + 1) * 38) / cols}
+                                    y1="1"
+                                    x2={1 + ((i + 1) * 38) / cols}
+                                    y2="51"
+                                    stroke={selected ? "#93c5fd" : "#e5e7eb"}
+                                    strokeWidth="0.6"
+                                  />
+                                ))}
+                              {rows > 1 &&
+                                Array.from({ length: rows - 1 }).map((_, i) => (
+                                  <line
+                                    key={`h-${i}`}
+                                    x1="1"
+                                    y1={1 + ((i + 1) * 50) / rows}
+                                    x2="39"
+                                    y2={1 + ((i + 1) * 50) / rows}
+                                    stroke={selected ? "#93c5fd" : "#e5e7eb"}
+                                    strokeWidth="0.6"
+                                  />
+                                ))}
+                              <rect
+                                x="1.5"
+                                y="1.5"
+                                width={38 / cols - 2}
+                                height={50 / rows - 2}
+                                rx="1"
+                                fill={selected ? "#dbeafe" : "#f3f4f6"}
+                              />
                             </>
                           )}
                         </svg>
-                        <span className={`text-xs font-medium ${selected ? 'text-blue-700' : 'text-gray-500'}`}>
-                          {val === 1 ? t('printer.nupOff') : t('printer.nupValue', { n: val })}
+                        <span
+                          className={`text-xs font-medium ${selected ? "text-blue-700" : "text-gray-500"}`}
+                        >
+                          {val === 1
+                            ? t("printer.nupOff")
+                            : t("printer.nupValue", { n: val })}
                         </span>
                       </label>
                     );
                   })}
                 </div>
+
+                {nup > 1 && (
+                  <div className="mt-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      {t("printer.nupDirection")}
+                    </label>
+                    <div className="flex gap-4">
+                      <label
+                        className={`flex-1 flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${nupDirection === "horizontal" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:bg-gray-50"}`}
+                      >
+                        <input
+                          type="radio"
+                          name="nupDirection"
+                          value="horizontal"
+                          checked={nupDirection === "horizontal"}
+                          onChange={() => setNupDirection("horizontal")}
+                          className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                        />
+                        <ArrowLeftRight className="w-4 h-4 ml-2 text-gray-400" />
+                        <span className="ml-2 text-sm font-medium text-gray-900">
+                          {t("printer.nupHorizontal")}
+                        </span>
+                      </label>
+                      <label
+                        className={`flex-1 flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${nupDirection === "vertical" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:bg-gray-50"}`}
+                      >
+                        <input
+                          type="radio"
+                          name="nupDirection"
+                          value="vertical"
+                          checked={nupDirection === "vertical"}
+                          onChange={() => setNupDirection("vertical")}
+                          className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                        />
+                        <ArrowUpDown className="w-4 h-4 ml-2 text-gray-400" />
+                        <span className="ml-2 text-sm font-medium text-gray-900">
+                          {t("printer.nupVertical")}
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {nup > 1 && (
-                <div className="mt-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('printer.nupDirection')}</label>
-                  <div className="flex gap-4">
-                    <label className={`flex-1 flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${nupDirection === 'horizontal' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
-                      <input
-                        type="radio"
-                        name="nupDirection"
-                        value="horizontal"
-                        checked={nupDirection === 'horizontal'}
-                        onChange={() => setNupDirection('horizontal')}
-                        className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                      />
-                      <ArrowLeftRight className="w-4 h-4 ml-2 text-gray-400" />
-                      <span className="ml-2 text-sm font-medium text-gray-900">{t('printer.nupHorizontal')}</span>
-                    </label>
-                    <label className={`flex-1 flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${nupDirection === 'vertical' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
-                      <input
-                        type="radio"
-                        name="nupDirection"
-                        value="vertical"
-                        checked={nupDirection === 'vertical'}
-                        onChange={() => setNupDirection('vertical')}
-                        className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                      />
-                      <ArrowUpDown className="w-4 h-4 ml-2 text-gray-400" />
-                      <span className="ml-2 text-sm font-medium text-gray-900">{t('printer.nupVertical')}</span>
-                    </label>
-                  </div>
-                </div>
-              )}
-
               <div className="mt-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t('common.duplex')} <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {t("common.duplex")} <span className="text-red-500">*</span>
+                </label>
                 <div className="flex gap-4">
-                  <label className={`flex-1 flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${duplex === 'off' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                  <label
+                    className={`flex-1 flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${duplex === "off" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:bg-gray-50"}`}
+                  >
                     <input
                       type="radio"
                       name="duplex"
                       value="off"
-                      checked={duplex === 'off'}
-                      onChange={() => setDuplex('off')}
+                      checked={duplex === "off"}
+                      onChange={() => setDuplex("off")}
                       className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                     />
-                    <span className="ml-3 block text-sm font-medium text-gray-900">{t('printer.simplex')}</span>
+                    <span className="ml-3 block text-sm font-medium text-gray-900">
+                      {t("printer.simplex")}
+                    </span>
                   </label>
 
-                  <label className={`flex-1 flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${duplex === 'true' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'} ${printer?.duplex_mode === 'off' || isDuplexDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                  <label
+                    className={`flex-1 flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${duplex === "true" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:bg-gray-50"} ${printer?.duplex_mode === "off" || isDuplexDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
                     <input
                       type="radio"
                       name="duplex"
                       value="true"
-                      checked={duplex === 'true'}
-                      onChange={() => setDuplex('true')}
-                      disabled={printer?.duplex_mode === 'off' || isDuplexDisabled}
+                      checked={duplex === "true"}
+                      onChange={() => setDuplex("true")}
+                      disabled={
+                        printer?.duplex_mode === "off" || isDuplexDisabled
+                      }
                       className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 disabled:opacity-50"
                     />
                     <div className="ml-3">
-                      <span className="block text-sm font-medium text-gray-900">{t('printer.doubleSided')}</span>
-                      <span className="block text-xs text-gray-500">{t(printer?.duplex_mode === 'auto' ? 'printer.auto' : 'printer.manual')}</span>
+                      <span className="block text-sm font-medium text-gray-900">
+                        {t("printer.doubleSided")}
+                      </span>
+                      <span className="block text-xs text-gray-500">
+                        {t(
+                          printer?.duplex_mode === "auto"
+                            ? "printer.auto"
+                            : "printer.manual",
+                        )}
+                      </span>
                     </div>
                   </label>
                 </div>
                 {isDuplexDisabled && (
                   <p className="mt-2 text-xs text-gray-500">
-                    {t('printer.duplexDisabledForSinglePage')}
+                    {t("printer.duplexDisabledForSinglePage")}
                   </p>
                 )}
               </div>
@@ -1277,40 +2097,61 @@ function PrinterContent() {
           </div>
 
           {/* Right Column */}
-          <div className={`w-full lg:w-1/2 flex flex-col ${!hasDocument ? 'hidden lg:flex' : ''}`}>
+          <div
+            className={`w-full lg:w-1/2 flex flex-col ${!hasDocument ? "hidden lg:flex" : ""}`}
+          >
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col h-[calc(100vh-21rem)] min-h-[400px] overflow-hidden">
               <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
-                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2"><FileText className="w-5 h-5 text-gray-400" />{merging ? t('printer.merging') : t('printer.preview')}</h2>
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-gray-400" />
+                  {merging ? t("printer.merging") : t("printer.preview")}
+                </h2>
                 {hasDocument && previewError && (
                   <button
                     type="button"
                     onClick={() => setPreviewVersion((v) => v + 1)}
                     className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                    aria-label={t('printer.retryPreview')}
-                    title={t('printer.retryPreview')}
+                    aria-label={t("printer.retryPreview")}
+                    title={t("printer.retryPreview")}
                   >
                     <RefreshCw className="h-4 w-4" />
                   </button>
                 )}
-                {hasDocument && !previewError && previewPdfUrl && !previewLoading && (
-                  <button
-                    type="button"
-                    onClick={handleDownloadPreview}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                    aria-label={t('printer.downloadFile')}
-                    title={t('printer.downloadFile')}
-                  >
-                    <Download className="h-4 w-4" />
-                  </button>
-                )}
+                {hasDocument &&
+                  !previewError &&
+                  previewPdfUrl &&
+                  !previewLoading && (
+                    <button
+                      type="button"
+                      onClick={handleDownloadPreview}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                      aria-label={t("printer.downloadFile")}
+                      title={t("printer.downloadFile")}
+                    >
+                      <Download className="h-4 w-4" />
+                    </button>
+                  )}
               </div>
 
+              {batchType === "doc" && (
+                <div className="px-6 py-2 bg-blue-50 border-b border-blue-100 shrink-0">
+                  <p className="text-xs text-blue-600">
+                    {t("printer.batchFilesTitle")}:{" "}
+                    {t("printer.fileCount", { count: batchFiles.length })}
+                  </p>
+                </div>
+              )}
+
               <DocumentPreview
-                images={hasDocument ? (() => {
-                  const sel = getSelectedPages();
-                  if (!sel) return previewImages;
-                  return sel.map((p) => previewImages[p - 1]).filter(Boolean);
-                })() : []}
+                images={
+                  !hasDocument
+                    ? []
+                    : selectedPages
+                      ? selectedPages
+                          .map((p) => previewImages[p - 1])
+                          .filter(Boolean)
+                      : previewImages
+                }
                 loading={previewLoading || merging}
                 error={previewError}
                 nup={nup === 1 ? undefined : nup}
@@ -1319,7 +2160,7 @@ function PrinterContent() {
                 fallbackNode={
                   <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-2">
                     <FileText className="w-12 h-12 opacity-20" />
-                    <p className="text-sm">{t('printer.previewEmpty')}</p>
+                    <p className="text-sm">{t("printer.previewEmpty")}</p>
                   </div>
                 }
               />
@@ -1345,7 +2186,13 @@ function PrinterContent() {
 
 export default function PrinterPage() {
   return (
-    <Suspense fallback={<div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
+    <Suspense
+      fallback={
+        <div className="flex justify-center p-12">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        </div>
+      }
+    >
       <PrinterContent />
     </Suspense>
   );

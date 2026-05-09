@@ -1,15 +1,24 @@
-import axios, { type AxiosInstance } from 'axios';
+import axios, { type AxiosInstance } from "axios";
+
+export const getFileExtension = (fileName: string): string => {
+  const parts = fileName.split(".");
+  if (parts.length <= 1) return "";
+  return parts[parts.length - 1].toLowerCase();
+};
 
 export const apiErrMsg = (err: unknown, fallback: string): string => {
-  const e = err as { response?: { data?: { error?: string } }; message?: string };
+  const e = err as {
+    response?: { data?: { error?: string } };
+    message?: string;
+  };
   return e?.response?.data?.error ?? e?.message ?? fallback;
 };
 
 export const parseGMTDate = (dateStr: string): Date =>
-  new Date(dateStr.replace(/-/g, '/') + ' GMT');
+  new Date(dateStr.replace(/-/g, "/") + " GMT");
 
 export const downloadFile = (url: string, filename: string): void => {
-  const a = document.createElement('a');
+  const a = document.createElement("a");
   a.href = url;
   a.download = filename;
   document.body.appendChild(a);
@@ -21,7 +30,7 @@ export const createApiClient = (baseURL: string): AxiosInstance => {
   const client = axios.create({ baseURL });
 
   client.interceptors.request.use((config) => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem("token");
     if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
   });
@@ -35,8 +44,8 @@ export const createApiClient = (baseURL: string): AxiosInstance => {
           await new Promise((resolve) => setTimeout(resolve, 500));
           return client(error.config);
         }
-        localStorage.removeItem('token');
-        window.location.href = '/';
+        localStorage.removeItem("token");
+        window.location.href = "/";
       }
       return Promise.reject(error);
     },
@@ -50,29 +59,39 @@ const normalizeImageToJpeg = (file: File): Promise<ArrayBuffer> =>
     const img = new Image();
     const objectUrl = URL.createObjectURL(file);
     img.onload = () => {
-      const canvas = document.createElement('canvas');
+      const canvas = document.createElement("canvas");
       canvas.width = img.width;
       canvas.height = img.height;
-      canvas.getContext('2d')!.drawImage(img, 0, 0);
-      canvas.toBlob((blob) => {
-        URL.revokeObjectURL(objectUrl);
-        if (!blob) { reject(new Error('canvas.toBlob failed')); return; }
-        blob.arrayBuffer().then(resolve).catch(reject);
-      }, 'image/jpeg', 0.92);
+      canvas.getContext("2d")!.drawImage(img, 0, 0);
+      canvas.toBlob(
+        (blob) => {
+          URL.revokeObjectURL(objectUrl);
+          if (!blob) {
+            reject(new Error("canvas.toBlob failed"));
+            return;
+          }
+          blob.arrayBuffer().then(resolve).catch(reject);
+        },
+        "image/jpeg",
+        0.92,
+      );
     };
-    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('Image load failed')); };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Image load failed"));
+    };
     img.src = objectUrl;
   });
 
 export const imagesToPdf = async (files: File[]): Promise<Blob> => {
-  const { PDFDocument } = await import('pdf-lib');
+  const { PDFDocument } = await import("pdf-lib");
   const pdf = await PDFDocument.create();
   for (const file of files) {
     let image;
-    if (file.type === 'image/png') {
+    if (file.type === "image/png") {
       const buf = await file.arrayBuffer();
       image = await pdf.embedPng(buf);
-    } else if (file.type === 'image/jpeg') {
+    } else if (file.type === "image/jpeg") {
       const buf = await file.arrayBuffer();
       image = await pdf.embedJpg(buf);
     } else {
@@ -80,10 +99,17 @@ export const imagesToPdf = async (files: File[]): Promise<Blob> => {
       image = await pdf.embedJpg(buf);
     }
     const page = pdf.addPage([image.width, image.height]);
-    page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
+    page.drawImage(image, {
+      x: 0,
+      y: 0,
+      width: image.width,
+      height: image.height,
+    });
   }
   const bytes = await pdf.save();
-  return new Blob([bytes as unknown as Uint8Array<ArrayBuffer>], { type: 'application/pdf' });
+  return new Blob([bytes as unknown as Uint8Array<ArrayBuffer>], {
+    type: "application/pdf",
+  });
 };
 
 type NupValue = 2 | 4 | 6;
@@ -110,10 +136,16 @@ export const getOptimalLayout = (
   if (!pageWidth || !pageHeight) return { ...NUP_GRIDS[nup], rotate: false };
 
   let best: LayoutResult & { coverage: number; _aspectMatch: number } = {
-    ...NUP_GRIDS[nup], rotate: false, coverage: 0, _aspectMatch: 0,
+    ...NUP_GRIDS[nup],
+    rotate: false,
+    coverage: 0,
+    _aspectMatch: 0,
   };
   const srcAspect = pageWidth / pageHeight;
-  const sheets = [{ w: A4.width, h: A4.height }, { w: A4.height, h: A4.width }];
+  const sheets = [
+    { w: A4.width, h: A4.height },
+    { w: A4.height, h: A4.width },
+  ];
 
   for (const sheet of sheets) {
     for (let cols = nup; cols >= 1; cols--) {
@@ -124,12 +156,23 @@ export const getOptimalLayout = (
       const cellAspect = cellW / cellH;
 
       const scale = Math.min(cellW / pageWidth, cellH / pageHeight);
-      const coverage = (pageWidth * scale * pageHeight * scale * nup) / (sheet.w * sheet.h);
+      const coverage =
+        (pageWidth * scale * pageHeight * scale * nup) / (sheet.w * sheet.h);
 
       const aspectMatch = -Math.abs(cellAspect - srcAspect);
 
-      if (coverage > best.coverage + 1e-6 || (Math.abs(coverage - best.coverage) < 1e-6 && aspectMatch > best._aspectMatch)) {
-        best = { cols, rows, rotate: sheet.w === A4.height, coverage, _aspectMatch: aspectMatch };
+      if (
+        coverage > best.coverage + 1e-6 ||
+        (Math.abs(coverage - best.coverage) < 1e-6 &&
+          aspectMatch > best._aspectMatch)
+      ) {
+        best = {
+          cols,
+          rows,
+          rotate: sheet.w === A4.height,
+          coverage,
+          _aspectMatch: aspectMatch,
+        };
       }
     }
   }
@@ -137,23 +180,45 @@ export const getOptimalLayout = (
   return { cols: best.cols, rows: best.rows, rotate: best.rotate };
 };
 
+export const getExtColor = (ext: string): string => {
+  const colors: Record<string, string> = {
+    pdf: "bg-red-100 text-red-700",
+    doc: "bg-blue-100 text-blue-700",
+    docx: "bg-blue-100 text-blue-700",
+    ppt: "bg-orange-100 text-orange-700",
+    pptx: "bg-orange-100 text-orange-700",
+    xls: "bg-green-100 text-green-700",
+    xlsx: "bg-green-100 text-green-700",
+    txt: "bg-gray-100 text-gray-700",
+    rtf: "bg-gray-100 text-gray-700",
+    odt: "bg-indigo-100 text-indigo-700",
+    ods: "bg-green-100 text-green-700",
+    odp: "bg-orange-100 text-orange-700",
+    csv: "bg-green-100 text-green-700",
+  };
+  return colors[ext] ?? "bg-purple-100 text-purple-700";
+};
+
 export const createNupPdf = async (
   file: File,
   nup: NupValue | 1,
-  direction: 'horizontal' | 'vertical',
+  direction: "horizontal" | "vertical",
   selectedPages?: number[],
   pageDims?: { pageWidth: number; pageHeight: number },
 ): Promise<Blob> => {
-  if (nup === 1) return new Blob([await file.arrayBuffer()], { type: 'application/pdf' });
+  if (nup === 1)
+    return new Blob([await file.arrayBuffer()], { type: "application/pdf" });
 
-  const { PDFDocument } = await import('pdf-lib');
+  const { PDFDocument } = await import("pdf-lib");
   const srcBytes = await file.arrayBuffer();
   const srcDoc = await PDFDocument.load(srcBytes);
   const srcTotalPages = srcDoc.getPageCount();
 
   const outDoc = await PDFDocument.create();
   const indices = selectedPages
-    ? selectedPages.filter((p) => p >= 1 && p <= srcTotalPages).map((p) => p - 1)
+    ? selectedPages
+        .filter((p) => p >= 1 && p <= srcTotalPages)
+        .map((p) => p - 1)
     : [...Array(srcTotalPages).keys()];
   const embeddedPages = await outDoc.embedPdf(srcDoc, indices);
   const totalPages = indices.length;
@@ -179,7 +244,7 @@ export const createNupPdf = async (
 
       let col: number;
       let row: number;
-      if (direction === 'vertical') {
+      if (direction === "vertical") {
         col = Math.floor(slot / rows);
         row = slot % rows;
       } else {
@@ -198,5 +263,5 @@ export const createNupPdf = async (
   }
 
   const bytes = await outDoc.save();
-  return new Blob([bytes], { type: 'application/pdf' });
+  return new Blob([bytes], { type: "application/pdf" });
 };
