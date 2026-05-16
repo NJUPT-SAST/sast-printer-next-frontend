@@ -62,12 +62,29 @@ describe("DocumentPreview", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps N-up preview sheets at A4 paper size", () => {
+    const images = ["p1.png", "p2.png"];
+    render(
+      <DocumentPreview
+        images={images}
+        nup={2}
+        nupDirection="horizontal"
+        pageDimensions={[{ pageWidth: 595, pageHeight: 842 }]}
+      />,
+    );
+
+    expect(screen.getByTestId("nup-sheet-paper")).toHaveStyle({
+      aspectRatio: "842 / 595",
+    });
+  });
+
   it("renders blank slots for odd pages in N-up", () => {
     const images = ["p1.png", "p2.png", "p3.png"];
     const { container } = render(
       <DocumentPreview images={images} nup={4} nupDirection="horizontal" />,
     );
     expect(container.querySelectorAll("img")).toHaveLength(3);
+    expect(screen.getAllByTestId("nup-slot")).toHaveLength(4);
   });
 
   it("does not render N-up grid when nup is 1", () => {

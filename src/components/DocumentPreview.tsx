@@ -7,6 +7,8 @@ import { getOptimalLayout } from "@/lib/utils";
 
 GlobalWorkerOptions.workerSrc = pdfWorker;
 
+const A4_PREVIEW_SIZE = { width: 595, height: 842 };
+
 /* eslint-disable react-refresh/only-export-components */
 export interface PageDimensions {
   pageWidth: number;
@@ -71,15 +73,19 @@ export function DocumentPreview({
 
   const renderNupGrid = () => {
     if (!nup || nup <= 1) return null;
-    const layout = pageDimensions?.[0]
-      ? getOptimalLayout(
-          pageDimensions[0].pageWidth,
-          pageDimensions[0].pageHeight,
-          nup,
-        )
-      : null;
-    const cols = layout?.cols ?? (nup === 6 ? 3 : 2);
-    const rows = layout?.rows ?? (nup === 2 ? 1 : 2);
+    const layout = getOptimalLayout(
+      pageDimensions?.[0]?.pageWidth ?? A4_PREVIEW_SIZE.width,
+      pageDimensions?.[0]?.pageHeight ?? A4_PREVIEW_SIZE.height,
+      nup,
+    );
+    const cols = layout.cols;
+    const rows = layout.rows;
+    const sheetWidth = layout.rotate
+      ? A4_PREVIEW_SIZE.height
+      : A4_PREVIEW_SIZE.width;
+    const sheetHeight = layout.rotate
+      ? A4_PREVIEW_SIZE.width
+      : A4_PREVIEW_SIZE.height;
     const perSheet = nup;
     const sheetCount = Math.ceil(images.length / perSheet);
     const sheets: JSX.Element[] = [];
@@ -87,12 +93,6 @@ export function DocumentPreview({
     for (let s = 0; s < sheetCount; s++) {
       const startPage = s * perSheet + 1;
       const endPage = Math.min((s + 1) * perSheet, images.length);
-      const sheetImages: string[] = [];
-      for (let slot = 0; slot < perSheet; slot++) {
-        const srcIdx = s * perSheet + slot;
-        if (srcIdx >= images.length) break;
-        sheetImages.push(images[srcIdx]);
-      }
 
       sheets.push(
         <div
@@ -107,21 +107,35 @@ export function DocumentPreview({
             })}
           </p>
           <div
-            className="grid gap-1"
+            data-testid="nup-sheet-paper"
+            className="grid gap-1 overflow-hidden rounded border border-gray-100 bg-white"
             style={{
+              aspectRatio: `${sheetWidth} / ${sheetHeight}`,
               gridTemplateColumns: `repeat(${cols}, 1fr)`,
               gridTemplateRows: `repeat(${rows}, 1fr)`,
               gridAutoFlow: nupDirection === "vertical" ? "column" : "row",
             }}
           >
-            {sheetImages.map((src, i) => (
-              <img
-                key={`page-${s * perSheet + i}`}
-                src={src}
-                alt={t("printer.previewPage", { page: s * perSheet + i + 1 })}
-                className="w-full h-auto rounded border border-gray-100"
-              />
-            ))}
+            {Array.from({ length: perSheet }).map((_, i) => {
+              const pageIndex = s * perSheet + i;
+              const src = images[pageIndex];
+
+              return (
+                <div
+                  key={`slot-${pageIndex}`}
+                  data-testid="nup-slot"
+                  className="min-h-0 min-w-0 overflow-hidden rounded border border-gray-100 bg-white"
+                >
+                  {src && (
+                    <img
+                      src={src}
+                      alt={t("printer.previewPage", { page: pageIndex + 1 })}
+                      className="h-full w-full object-contain"
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>,
       );

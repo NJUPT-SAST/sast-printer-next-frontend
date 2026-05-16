@@ -67,6 +67,8 @@ interface SupportedFileTypesResponse {
   office_conversion_enabled: boolean;
 }
 
+type PageSet = "all" | "odd" | "even" | "custom";
+
 function PrinterContent() {
   const { t } = useTranslation();
   const { toast } = useUi();
@@ -94,7 +96,7 @@ function PrinterContent() {
   const [copies, setCopies] = useState(1);
   const [duplex, setDuplex] = useState("");
   const [collate, setCollate] = useState("true");
-  const [pageSet, setPageSet] = useState("all");
+  const [pageSet, setPageSet] = useState<PageSet>("all");
   const [pages, setPages] = useState("");
   const validatePageRange = useCallback(
     (input: string, maxPage?: number | null, strictBounds = false) => {
@@ -173,8 +175,11 @@ function PrinterContent() {
   );
 
   const pagesError = useMemo(
-    () => validatePageRange(pages, previewPageCount).error,
-    [pages, previewPageCount, validatePageRange],
+    () =>
+      pageSet === "custom" && pages.trim()
+        ? validatePageRange(pages, previewPageCount).error
+        : "",
+    [pageSet, pages, previewPageCount, validatePageRange],
   );
   const [nup, setNup] = useState<1 | 2 | 4 | 6>(1);
   const [nupDirection, setNupDirection] = useState<"horizontal" | "vertical">(
@@ -268,47 +273,44 @@ function PrinterContent() {
     return selectedPages.size;
   };
 
-  const getSelectedPages = (): number[] | null => {
-    if (!pages.trim() && pageSet === "all") return null;
+  const parsePageRangeToList = (input: string): number[] => {
+    const selected = new Set<number>();
+    const parts = input
+      .trim()
+      .split(",")
+      .map((p) => p.trim());
 
-    let pageList: number[];
-    if (!pages.trim() && previewPageCount) {
-      pageList = Array.from({ length: previewPageCount }, (_, i) => i + 1);
-    } else {
-      const selected = new Set<number>();
-      const parts = pages
-        .trim()
-        .split(",")
-        .map((p) => p.trim());
-      for (const part of parts) {
-        if (part.includes("-")) {
-          const [start, end] = part.split("-").map(Number);
-          for (let i = start; i <= end; i++) selected.add(i);
-        } else if (part) {
-          selected.add(Number(part));
-        }
+    for (const part of parts) {
+      if (part.includes("-")) {
+        const [start, end] = part.split("-").map(Number);
+        for (let i = start; i <= end; i++) selected.add(i);
+      } else if (part) {
+        selected.add(Number(part));
       }
-      pageList = Array.from(selected).sort((a, b) => a - b);
     }
 
-    if (pageSet !== "all") {
-      pageList = pageList.filter((p) =>
-        pageSet === "odd" ? p % 2 !== 0 : p % 2 === 0,
-      );
-    }
-
-    return pageList.length > 0 ? pageList : null;
+    return Array.from(selected).sort((a, b) => a - b);
   };
 
-  const selectedPages = useMemo(() => getSelectedPages(), [
-    pages,
-    pageSet,
-    previewPageCount,
-  ]);
-  const selectedPageCount = useMemo(
-    () => getSelectedPageCount(pages, previewPageCount),
-    [pages, previewPageCount],
-  );
+  const selectedPages = useMemo(() => {
+    if (pageSet === "all") return null;
+
+    if (pageSet === "custom") {
+      if (!pages.trim()) return null;
+      const { valid } = validatePageRange(pages, previewPageCount);
+      return valid ? parsePageRangeToList(pages) : null;
+    }
+
+    if (!previewPageCount) return null;
+
+    const pageList = Array.from(
+      { length: previewPageCount },
+      (_, i) => i + 1,
+    ).filter((p) => (pageSet === "odd" ? p % 2 !== 0 : p % 2 === 0));
+
+    return pageList.length > 0 ? pageList : null;
+  }, [pageSet, pages, previewPageCount, validatePageRange]);
+  const selectedPageCount = selectedPages?.length ?? null;
   const isDuplexDisabled =
     (previewPageCount !== null && previewPageCount <= 1) ||
     selectedPageCount === 1;
@@ -330,6 +332,59 @@ function PrinterContent() {
     ) {
       setDuplex("off");
     }
+  };
+
+  const getFinalPagesParam = (): {
+    valid: boolean;
+    pages: string;
+    error?: string;
+  } => {
+    if (pageSet === "all") {
+      return { valid: true, pages: "" };
+    }
+
+    if (pageSet === "custom") {
+      const finalPages = pages.trim();
+      if (!finalPages) {
+        return {
+          valid: false,
+          pages: "",
+          error: t("printer.pageRangeRequired"),
+        };
+      }
+
+      const { valid, error } = validatePageRange(
+        finalPages,
+        previewPageCount,
+        true,
+      );
+      return valid
+        ? { valid: true, pages: finalPages }
+        : { valid: false, pages: "", error };
+    }
+
+    if (!previewPageCount) {
+      return {
+        valid: false,
+        pages: "",
+        error: t("printer.pageCountUnavailable"),
+      };
+    }
+
+    const finalPages =
+      selectedPages?.filter((page) =>
+        pageSet === "odd" ? page % 2 !== 0 : page % 2 === 0,
+      ) ?? [];
+
+    if (!finalPages.length) {
+      return {
+        valid: false,
+        pages: "",
+        error: t("printer.pageRangeInvalid"),
+      };
+    }
+
+    return { valid: true, pages: finalPages.join(",") };
   };
 
   useEffect(() => {
@@ -479,6 +534,7 @@ function PrinterContent() {
     sourceTab,
     file,
     batchMode,
+    batchType,
     batchFiles,
     imageFiles,
     previewIndex,
@@ -537,12 +593,6 @@ function PrinterContent() {
       setNup(1); // eslint-disable-line react-hooks/set-state-in-effect -- auto-correct nup for single page
     }
   }, [isNupDisabled, nup]);
-
-  useEffect(() => {
-    if (previewIndex >= batchFiles.length) {
-      setPreviewIndex(Math.max(0, batchFiles.length - 1));
-    }
-  }, [batchFiles.length, previewIndex]);
 
   useEffect(() => {
     const fetchSupportedFileTypes = async () => {
@@ -627,12 +677,14 @@ function PrinterContent() {
       if (imageFiles.length > 0) {
         setImageFiles([]);
       }
+      setPreviewIndex(0);
       setBatchType(null);
       setBatchProgress(null);
       setBatchMode(false);
     } else {
       if (file) {
         setBatchFiles([file]);
+        setPreviewIndex(0);
         setBatchType("doc");
         setFile(null);
       }
@@ -680,6 +732,9 @@ function PrinterContent() {
     setBatchFiles((prev) => {
       const next = prev.filter((_, i) => i !== index);
       if (next.length === 0) setBatchType(null);
+      setPreviewIndex((current) =>
+        current >= next.length ? Math.max(0, next.length - 1) : current,
+      );
       return next;
     });
   };
@@ -756,6 +811,7 @@ function PrinterContent() {
         setImageFiles([]);
         setFile(null);
         setBatchFiles(docs.slice(0, MAX_BATCH_FILES));
+        setPreviewIndex(0);
         setBatchType("doc");
         if (docs.length > MAX_BATCH_FILES) {
           toast({
@@ -865,6 +921,7 @@ function PrinterContent() {
       setFile(null);
       setImageFiles([]);
       setBatchFiles([]);
+      setPreviewIndex(0);
       setBatchMode(false);
     } else {
       setFeishuUrl("");
@@ -935,6 +992,7 @@ function PrinterContent() {
         setImageFiles([]);
         setFile(null);
         setBatchFiles(docs.slice(0, MAX_BATCH_FILES));
+        setPreviewIndex(0);
         setBatchType("doc");
         if (docs.length > MAX_BATCH_FILES) {
           toast({
@@ -974,11 +1032,11 @@ function PrinterContent() {
     setSubmitting(true);
     if (isInFeishu()) enableLeaveConfirm();
     try {
-      const { valid, error: validationError } = validatePageRange(
-        pages,
-        previewPageCount,
-        true,
-      );
+      const {
+        valid,
+        pages: finalPages,
+        error: validationError,
+      } = getFinalPagesParam();
       if (!valid) {
         toast({
           message: validationError || t("printer.pageRangeInvalid"),
@@ -988,51 +1046,9 @@ function PrinterContent() {
         return;
       }
 
-      let finalPages = pages.trim();
-      if (pageSet !== "all") {
-        const maxPage = previewPageCount;
-        if (!maxPage && !finalPages) {
-          toast({
-            message:
-              t("printer.pageCountUnavailable") || "Page count unavailable",
-            type: "error",
-          });
-          setSubmitting(false);
-          return;
-        }
-
-        let pagesList: number[] = [];
-        if (!finalPages && maxPage) {
-          pagesList = Array.from({ length: maxPage }, (_, i) => i + 1);
-        } else {
-          const selectedPages = new Set<number>();
-          const parts = finalPages.split(",").map((p) => p.trim());
-          for (const part of parts) {
-            if (part.includes("-")) {
-              const [start, end] = part.split("-").map(Number);
-              for (let i = start; i <= end; i++) selectedPages.add(i);
-            } else if (part) {
-              selectedPages.add(Number(part));
-            }
-          }
-          pagesList = Array.from(selectedPages).sort((a, b) => a - b);
-        }
-
-        pagesList = pagesList.filter((p) =>
-          pageSet === "odd" ? p % 2 !== 0 : p % 2 === 0,
-        );
-        finalPages = pagesList.join(",");
-
-        if (!finalPages) {
-          toast({ message: t("printer.pageRangeInvalid"), type: "error" });
-          setSubmitting(false);
-          return;
-        }
-      }
-
       if (sourceTab === "file" && file) {
         let fileToSubmit = file;
-        const selectedForNup = nup > 1 ? getSelectedPages() : null;
+        const selectedForNup = nup > 1 ? selectedPages : null;
         if (nup > 1) {
           try {
             fileToSubmit = new File(
@@ -1144,6 +1160,19 @@ function PrinterContent() {
       return;
     }
 
+    const {
+      valid,
+      pages: finalPages,
+      error: validationError,
+    } = getFinalPagesParam();
+    if (!valid) {
+      toast({
+        message: validationError || t("printer.pageRangeInvalid"),
+        type: "error",
+      });
+      return;
+    }
+
     setSubmitting(true);
     if (isInFeishu()) enableLeaveConfirm();
     try {
@@ -1154,7 +1183,15 @@ function PrinterContent() {
 
       if (nup > 1) {
         fileToSubmit = new File(
-          [await createNupPdf(fileToSubmit, nup, nupDirection)],
+          [
+            await createNupPdf(
+              fileToSubmit,
+              nup,
+              nupDirection,
+              selectedPages ?? undefined,
+              pageDimensions[0],
+            ),
+          ],
           "images_nup.pdf",
           { type: "application/pdf" },
         );
@@ -1170,6 +1207,9 @@ function PrinterContent() {
         queryParams.append("duplex", duplex);
       }
       queryParams.append("collate", collate);
+      if (finalPages && nup === 1) {
+        queryParams.append("pages", finalPages);
+      }
 
       await api.post(`/jobs?${queryParams.toString()}`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -1194,29 +1234,17 @@ function PrinterContent() {
       return;
     }
 
-    let finalPages = pages.trim();
-    if (pageSet !== "all") {
-      const maxPage = previewPageCount;
-      let pagesList: number[] = [];
-      if (!finalPages && maxPage) {
-        pagesList = Array.from({ length: maxPage }, (_, i) => i + 1);
-      } else if (finalPages) {
-        const selectedPages = new Set<number>();
-        const parts = finalPages.split(",").map((p) => p.trim());
-        for (const part of parts) {
-          if (part.includes("-")) {
-            const [start, end] = part.split("-").map(Number);
-            for (let p = start; p <= end; p++) selectedPages.add(p);
-          } else if (part) {
-            selectedPages.add(Number(part));
-          }
-        }
-        pagesList = Array.from(selectedPages).sort((a, b) => a - b);
-      }
-      pagesList = pagesList.filter((p) =>
-        pageSet === "odd" ? p % 2 !== 0 : p % 2 === 0,
-      );
-      finalPages = pagesList.join(",");
+    const {
+      valid,
+      pages: finalPages,
+      error: validationError,
+    } = getFinalPagesParam();
+    if (!valid) {
+      toast({
+        message: validationError || t("printer.pageRangeInvalid"),
+        type: "error",
+      });
+      return;
     }
 
     setSubmitting(true);
@@ -1228,7 +1256,9 @@ function PrinterContent() {
     let filesToSubmit: File[] = batchFiles;
     if (nup > 1) {
       const nupBlobs = await Promise.all(
-        batchFiles.map((f) => createNupPdf(f, nup, nupDirection)),
+        batchFiles.map((f) =>
+          createNupPdf(f, nup, nupDirection, selectedPages ?? undefined),
+        ),
       );
       filesToSubmit = nupBlobs.map(
         (blob, i) =>
@@ -1256,7 +1286,7 @@ function PrinterContent() {
           queryParams.append("duplex", duplex);
         }
         queryParams.append("collate", collate);
-        if (finalPages) {
+        if (finalPages && nup === 1) {
           queryParams.append("pages", finalPages);
         }
 
@@ -1848,41 +1878,47 @@ function PrinterContent() {
                         value: "even",
                         label: t("printer.pageSetEven") || "Even Pages",
                       },
+                      {
+                        value: "custom",
+                        label: t("printer.pageSetCustom") || "Custom",
+                      },
                     ]}
                     value={pageSet}
-                    onChange={setPageSet}
+                    onChange={(value) => setPageSet(value as PageSet)}
                     className="w-full px-4 py-2.5 rounded-xl"
                   />
                 </div>
               </div>
 
-              <div className="mt-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t("printer.pageRange")}
-                </label>
-                <input
-                  type="text"
-                  value={pages}
-                  onChange={handlePagesChange}
-                  placeholder={t("printer.pageRangePlaceholder")}
-                  className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:outline-none transition-shadow ${
-                    pagesError
-                      ? "border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50"
-                      : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
-                  }`}
-                />
-                {pagesError && (
-                  <p className="mt-1 text-xs text-red-600">{pagesError}</p>
-                )}
-                {previewPageCount && (
+              {pageSet === "custom" && (
+                <div className="mt-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    {t("printer.pageRange")}
+                  </label>
+                  <input
+                    type="text"
+                    value={pages}
+                    onChange={handlePagesChange}
+                    placeholder={t("printer.pageRangePlaceholder")}
+                    className={`w-full px-4 py-2 border rounded-xl focus:ring-2 focus:outline-none transition-shadow ${
+                      pagesError
+                        ? "border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50"
+                        : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                    }`}
+                  />
+                  {pagesError && (
+                    <p className="mt-1 text-xs text-red-600">{pagesError}</p>
+                  )}
+                  {previewPageCount && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      {t("printer.totalPages", { count: previewPageCount })}
+                    </p>
+                  )}
                   <p className="mt-1 text-xs text-gray-500">
-                    {t("printer.totalPages", { count: previewPageCount })}
+                    {t("printer.pageRangeHelp")}
                   </p>
-                )}
-                <p className="mt-1 text-xs text-gray-500">
-                  {t("printer.pageRangeHelp")}
-                </p>
-              </div>
+                </div>
+              )}
 
               <div className="mt-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
