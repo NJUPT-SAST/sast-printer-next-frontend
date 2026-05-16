@@ -1117,10 +1117,10 @@ function PrinterContent() {
         const formData = new FormData();
         formData.append("printer_id", id || "");
         formData.append("file", fileToSubmit);
+        formData.append("scale", scaleParam);
 
         const queryParams = new URLSearchParams();
         queryParams.append("copies", copies.toString());
-        queryParams.append("scale", scaleParam);
         if (duplex !== "off") {
           queryParams.append("duplex", duplex);
         }
@@ -1154,6 +1154,7 @@ function PrinterContent() {
           url: feishuUrl.trim(),
           printer_id: id || "",
           copies,
+          scale,
           collate: collate === "true",
         };
         if (duplex !== "off") {
@@ -1167,13 +1168,7 @@ function PrinterContent() {
           body.nup_direction = nupDirection;
         }
 
-        const queryParams = new URLSearchParams();
-        queryParams.append("scale", scaleParam);
-
-        const response = await api.post(
-          `/jobs/feishu?${queryParams.toString()}`,
-          body,
-        );
+        const response = await api.post("/jobs/feishu", body);
 
         if (response.data.hook_url) {
           setManualDuplexHook({
@@ -1260,10 +1255,10 @@ function PrinterContent() {
       const formData = new FormData();
       formData.append("printer_id", id || "");
       formData.append("file", fileToSubmit);
+      formData.append("scale", scaleParam);
 
       const queryParams = new URLSearchParams();
       queryParams.append("copies", copies.toString());
-      queryParams.append("scale", scaleParam);
       if (duplex !== "off") {
         queryParams.append("duplex", duplex);
       }
@@ -1353,10 +1348,10 @@ function PrinterContent() {
         const formData = new FormData();
         formData.append("printer_id", id || "");
         formData.append("file", fileToSubmit);
+        formData.append("scale", scaleParam);
 
         const queryParams = new URLSearchParams();
         queryParams.append("copies", copies.toString());
-        queryParams.append("scale", scaleParam);
         if (duplex !== "off") {
           queryParams.append("duplex", duplex);
         }
