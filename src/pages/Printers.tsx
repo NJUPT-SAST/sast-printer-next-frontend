@@ -69,6 +69,11 @@ interface SupportedFileTypesResponse {
 
 type PageSet = "all" | "odd" | "even" | "custom";
 
+const DEFAULT_SCALE = 100;
+const FEISHU_DEFAULT_SCALE = 90;
+const MIN_SCALE = 10;
+const MAX_SCALE = 400;
+
 function PrinterContent() {
   const { t } = useTranslation();
   const { toast } = useUi();
@@ -94,6 +99,7 @@ function PrinterContent() {
   const [previewPageCount, setPreviewPageCount] = useState<number | null>(null);
   const [previewVersion, setPreviewVersion] = useState(0);
   const [copies, setCopies] = useState(1);
+  const [scale, setScale] = useState(DEFAULT_SCALE);
   const [duplex, setDuplex] = useState("");
   const [collate, setCollate] = useState("true");
   const [pageSet, setPageSet] = useState<PageSet>("all");
@@ -187,6 +193,13 @@ function PrinterContent() {
   );
 
   const [sourceTab, setSourceTab] = useState<"file" | "feishu">("file");
+  const scaleError = useMemo(
+    () =>
+      Number.isInteger(scale) && scale >= MIN_SCALE && scale <= MAX_SCALE
+        ? ""
+        : t("printer.scaleInvalid"),
+    [scale, t],
+  );
   const [feishuUrl, setFeishuUrl] = useState("");
   const [feishuUrlError, setFeishuUrlError] = useState("");
   const [pickerLoading, setPickerLoading] = useState(false);
@@ -385,6 +398,18 @@ function PrinterContent() {
     }
 
     return { valid: true, pages: finalPages.join(",") };
+  };
+
+  const getScaleParam = (): {
+    valid: boolean;
+    scale: string;
+    error?: string;
+  } => {
+    if (!Number.isInteger(scale) || scale < MIN_SCALE || scale > MAX_SCALE) {
+      return { valid: false, scale: "", error: t("printer.scaleInvalid") };
+    }
+
+    return { valid: true, scale: scale.toString() };
   };
 
   useEffect(() => {
@@ -917,6 +942,7 @@ function PrinterContent() {
 
   const handleTabSwitch = (tab: "file" | "feishu") => {
     setSourceTab(tab);
+    setScale(tab === "feishu" ? FEISHU_DEFAULT_SCALE : DEFAULT_SCALE);
     if (tab === "feishu") {
       setFile(null);
       setImageFiles([]);
@@ -1046,6 +1072,20 @@ function PrinterContent() {
         return;
       }
 
+      const {
+        valid: scaleValid,
+        scale: scaleParam,
+        error: scaleValidationError,
+      } = getScaleParam();
+      if (!scaleValid) {
+        toast({
+          message: scaleValidationError || t("printer.scaleInvalid"),
+          type: "error",
+        });
+        setSubmitting(false);
+        return;
+      }
+
       if (sourceTab === "file" && file) {
         let fileToSubmit = file;
         const selectedForNup = nup > 1 ? selectedPages : null;
@@ -1080,6 +1120,7 @@ function PrinterContent() {
 
         const queryParams = new URLSearchParams();
         queryParams.append("copies", copies.toString());
+        queryParams.append("scale", scaleParam);
         if (duplex !== "off") {
           queryParams.append("duplex", duplex);
         }
@@ -1126,7 +1167,13 @@ function PrinterContent() {
           body.nup_direction = nupDirection;
         }
 
-        const response = await api.post("/jobs/feishu", body);
+        const queryParams = new URLSearchParams();
+        queryParams.append("scale", scaleParam);
+
+        const response = await api.post(
+          `/jobs/feishu?${queryParams.toString()}`,
+          body,
+        );
 
         if (response.data.hook_url) {
           setManualDuplexHook({
@@ -1173,6 +1220,19 @@ function PrinterContent() {
       return;
     }
 
+    const {
+      valid: scaleValid,
+      scale: scaleParam,
+      error: scaleValidationError,
+    } = getScaleParam();
+    if (!scaleValid) {
+      toast({
+        message: scaleValidationError || t("printer.scaleInvalid"),
+        type: "error",
+      });
+      return;
+    }
+
     setSubmitting(true);
     if (isInFeishu()) enableLeaveConfirm();
     try {
@@ -1203,6 +1263,7 @@ function PrinterContent() {
 
       const queryParams = new URLSearchParams();
       queryParams.append("copies", copies.toString());
+      queryParams.append("scale", scaleParam);
       if (duplex !== "off") {
         queryParams.append("duplex", duplex);
       }
@@ -1247,6 +1308,19 @@ function PrinterContent() {
       return;
     }
 
+    const {
+      valid: scaleValid,
+      scale: scaleParam,
+      error: scaleValidationError,
+    } = getScaleParam();
+    if (!scaleValid) {
+      toast({
+        message: scaleValidationError || t("printer.scaleInvalid"),
+        type: "error",
+      });
+      return;
+    }
+
     setSubmitting(true);
     if (isInFeishu()) enableLeaveConfirm();
 
@@ -1282,6 +1356,7 @@ function PrinterContent() {
 
         const queryParams = new URLSearchParams();
         queryParams.append("copies", copies.toString());
+        queryParams.append("scale", scaleParam);
         if (duplex !== "off") {
           queryParams.append("duplex", duplex);
         }
@@ -1824,7 +1899,7 @@ function PrinterContent() {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 mt-6 shrink-0">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 mt-6 shrink-0">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     {t("printer.copies")}
@@ -1837,6 +1912,35 @@ function PrinterContent() {
                     onChange={(e) => setCopies(parseInt(e.target.value) || 1)}
                     className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    {t("printer.scale")}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min={MIN_SCALE}
+                      max={MAX_SCALE}
+                      value={Number.isNaN(scale) ? "" : scale}
+                      onChange={(e) => {
+                        const value = e.target.value.trim();
+                        setScale(value ? parseInt(value, 10) : NaN);
+                      }}
+                      className={`w-full px-4 py-2 pr-10 border rounded-xl focus:ring-2 focus:outline-none transition-shadow ${
+                        scaleError
+                          ? "border-red-300 focus:ring-red-500 focus:border-red-500 bg-red-50"
+                          : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                      }`}
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400">
+                      %
+                    </span>
+                  </div>
+                  {scaleError && (
+                    <p className="mt-1 text-xs text-red-600">{scaleError}</p>
+                  )}
                 </div>
 
                 <div>
