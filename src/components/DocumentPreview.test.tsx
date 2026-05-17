@@ -39,6 +39,23 @@ describe("DocumentPreview", () => {
     ).toBeInTheDocument();
   });
 
+  it("scales regular preview content inside the paper", () => {
+    render(
+      <DocumentPreview
+        images={["page.png"]}
+        pageDimensions={[{ pageWidth: 595, pageHeight: 842 }]}
+        scale={90}
+      />,
+    );
+
+    expect(screen.getByTestId("preview-page-paper")).toHaveStyle({
+      aspectRatio: "595 / 842",
+    });
+    expect(screen.getByTestId("preview-page-image")).toHaveStyle({
+      transform: "scale(0.9)",
+    });
+  });
+
   it("renders loading state", () => {
     render(
       <DocumentPreview images={[]} loading={true} loadingText="Loading..." />,
@@ -75,6 +92,23 @@ describe("DocumentPreview", () => {
 
     expect(screen.getByTestId("nup-sheet-paper")).toHaveStyle({
       aspectRatio: "842 / 595",
+    });
+  });
+
+  it("scales N-up preview content inside the A4 sheet", () => {
+    const images = ["p1.png", "p2.png"];
+    render(
+      <DocumentPreview
+        images={images}
+        nup={2}
+        nupDirection="horizontal"
+        pageDimensions={[{ pageWidth: 595, pageHeight: 842 }]}
+        scale={90}
+      />,
+    );
+
+    expect(screen.getByTestId("nup-sheet-content")).toHaveStyle({
+      transform: "scale(0.9)",
     });
   });
 

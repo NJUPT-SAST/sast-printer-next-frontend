@@ -57,6 +57,7 @@ export interface DocumentPreviewProps {
   nup?: 2 | 4 | 6;
   nupDirection?: "horizontal" | "vertical";
   pageDimensions?: PageDimensions[];
+  scale?: number;
 }
 
 export function DocumentPreview({
@@ -68,8 +69,14 @@ export function DocumentPreview({
   nup,
   nupDirection = "horizontal",
   pageDimensions,
+  scale = 100,
 }: DocumentPreviewProps) {
   const { t } = useTranslation();
+  const previewScale = Number.isFinite(scale) && scale > 0 ? scale / 100 : 1;
+  const scaledContentStyle = {
+    transform: `scale(${previewScale})`,
+    transformOrigin: "center",
+  };
 
   const renderNupGrid = () => {
     if (!nup || nup <= 1) return null;
@@ -108,34 +115,42 @@ export function DocumentPreview({
           </p>
           <div
             data-testid="nup-sheet-paper"
-            className="grid gap-1 overflow-hidden rounded border border-gray-100 bg-white"
+            className="relative overflow-hidden rounded border border-gray-100 bg-white"
             style={{
               aspectRatio: `${sheetWidth} / ${sheetHeight}`,
-              gridTemplateColumns: `repeat(${cols}, 1fr)`,
-              gridTemplateRows: `repeat(${rows}, 1fr)`,
-              gridAutoFlow: nupDirection === "vertical" ? "column" : "row",
             }}
           >
-            {Array.from({ length: perSheet }).map((_, i) => {
-              const pageIndex = s * perSheet + i;
-              const src = images[pageIndex];
+            <div
+              data-testid="nup-sheet-content"
+              className="absolute inset-0 grid gap-1"
+              style={{
+                ...scaledContentStyle,
+                gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                gridTemplateRows: `repeat(${rows}, 1fr)`,
+                gridAutoFlow: nupDirection === "vertical" ? "column" : "row",
+              }}
+            >
+              {Array.from({ length: perSheet }).map((_, i) => {
+                const pageIndex = s * perSheet + i;
+                const src = images[pageIndex];
 
-              return (
-                <div
-                  key={`slot-${pageIndex}`}
-                  data-testid="nup-slot"
-                  className="min-h-0 min-w-0 overflow-hidden rounded border border-gray-100 bg-white"
-                >
-                  {src && (
-                    <img
-                      src={src}
-                      alt={t("printer.previewPage", { page: pageIndex + 1 })}
-                      className="h-full w-full object-contain"
-                    />
-                  )}
-                </div>
-              );
-            })}
+                return (
+                  <div
+                    key={`slot-${pageIndex}`}
+                    data-testid="nup-slot"
+                    className="min-h-0 min-w-0 overflow-hidden rounded border border-gray-100 bg-white"
+                  >
+                    {src && (
+                      <img
+                        src={src}
+                        alt={t("printer.previewPage", { page: pageIndex + 1 })}
+                        className="h-full w-full object-contain"
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>,
       );
@@ -162,21 +177,34 @@ export function DocumentPreview({
         </div>
       ) : images.length > 0 ? (
         <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-gray-100">
-          {images.map((image, index) => (
-            <div
-              key={`preview-page-${index + 1}`}
-              className="bg-white rounded-lg border border-gray-200 shadow-sm p-2"
-            >
-              <p className="text-xs text-gray-500 mb-2">
-                {t("printer.previewPage", { page: index + 1 })}
-              </p>
-              <img
-                src={image}
-                alt={t("printer.previewPage", { page: index + 1 })}
-                className="w-full h-auto rounded"
-              />
-            </div>
-          ))}
+          {images.map((image, index) => {
+            const dimensions = pageDimensions?.[index] ?? A4_PREVIEW_SIZE;
+            return (
+              <div
+                key={`preview-page-${index + 1}`}
+                className="bg-white rounded-lg border border-gray-200 shadow-sm p-2"
+              >
+                <p className="text-xs text-gray-500 mb-2">
+                  {t("printer.previewPage", { page: index + 1 })}
+                </p>
+                <div
+                  data-testid="preview-page-paper"
+                  className="relative overflow-hidden rounded bg-white"
+                  style={{
+                    aspectRatio: `${dimensions.pageWidth} / ${dimensions.pageHeight}`,
+                  }}
+                >
+                  <img
+                    data-testid="preview-page-image"
+                    src={image}
+                    alt={t("printer.previewPage", { page: index + 1 })}
+                    className="absolute inset-0 h-full w-full object-contain"
+                    style={scaledContentStyle}
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
         (fallbackNode ?? null)

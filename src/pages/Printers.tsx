@@ -2292,6 +2292,7 @@ function PrinterContent() {
                 nup={nup === 1 ? undefined : nup}
                 nupDirection={nupDirection}
                 pageDimensions={pageDimensions}
+                scale={scale}
                 fallbackNode={
                   <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-2">
                     <FileText className="w-12 h-12 opacity-20" />
