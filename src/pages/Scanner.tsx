@@ -7,6 +7,8 @@ import {
   downloadScanFile,
   getScanFiles,
   deleteScanFile,
+  getScanFileDisplayName,
+  isPdfScanFile,
   type Scanner,
   type PaperSize,
   type ScanFile,
@@ -183,6 +185,12 @@ export default function ScannerPage() {
   const [previewFilename, setPreviewFilename] = useState<string | null>(null);
   const [previewImages, setPreviewImages] = useState<string[]>([]);
 
+  useEffect(() => {
+    return () => {
+      if (imageUrl) URL.revokeObjectURL(imageUrl);
+    };
+  }, [imageUrl]);
+
   const formatBytes = (bytes: number, decimals = 2) => {
     if (!+bytes) return "0 B";
     const k = 1024;
@@ -225,15 +233,17 @@ export default function ScannerPage() {
 
       const res = await submitScan(requestPayload);
       if (res && res.file && res.file.name) {
-        setPreviewFilename(res.file.name);
+        const scannedFile = res.file;
+        const displayName = getScanFileDisplayName(scannedFile);
+        setPreviewFilename(displayName);
         setDownloadingFile(true);
         setDownloadLoaded(0);
-        setDownloadTotal(res.file.size || 0);
+        setDownloadTotal(scannedFile.size || 0);
         setDownloadProgress(0);
 
-        const fileBlob = await downloadScanFile(res.file.name, (e) => {
+        const fileBlob = await downloadScanFile(scannedFile, (e) => {
           setDownloadLoaded(e.loaded);
-          const total = e.total || res.file.size || 0;
+          const total = e.total || scannedFile.size || 0;
           if (total > 0) {
             setDownloadProgress(Math.round((e.loaded / total) * 100));
             setDownloadTotal(total);
@@ -244,7 +254,7 @@ export default function ScannerPage() {
         const objectUrl = URL.createObjectURL(fileBlob);
         setImageUrl(objectUrl);
 
-        if (res.file.name.toLowerCase().endsWith(".pdf")) {
+        if (isPdfScanFile(scannedFile) || fileBlob.type === "application/pdf") {
           try {
             const { images } = await renderPdfToImages(fileBlob);
             setPreviewImages(images);
@@ -279,12 +289,12 @@ export default function ScannerPage() {
     downloadFile(imageUrl, previewFilename || `scan-${Date.now()}.jpg`);
   };
 
-  const handleDownloadFile = async (filename: string) => {
+  const handleDownloadFile = async (file: ScanFile) => {
     try {
-      const blob = await downloadScanFile(filename);
+      const blob = await downloadScanFile(file);
       const url = URL.createObjectURL(blob);
-      downloadFile(url, filename);
-      URL.revokeObjectURL(url);
+      downloadFile(url, getScanFileDisplayName(file));
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
       console.error(err);
       toast({
@@ -921,57 +931,60 @@ export default function ScannerPage() {
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {files.map((f) => (
-                    <div
-                      key={f.name}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100"
-                    >
-                      <div className="flex flex-col overflow-hidden">
-                        <span
-                          className="text-sm font-medium text-gray-700 truncate"
-                          title={f.name}
-                        >
-                          {f.name}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {f.sizeString || formatBytes(f.size || 0)} •{" "}
-                          {new Date(f.lastModified).toLocaleString(
-                            locale === "zh" ? "zh-CN" : "en-US",
-                          )}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 ml-4">
-                        <button
-                          onClick={() => handleDownloadFile(f.name)}
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                          title={t("scanner.download") || "Download"}
-                        >
-                          <Download className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteFile(f.name)}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                          title={t("scanner.delete") || "Delete"}
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
+                  {files.map((f) => {
+                    const displayName = getScanFileDisplayName(f);
+                    return (
+                      <div
+                        key={f.fullname || f.path || f.name}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100"
+                      >
+                        <div className="flex flex-col overflow-hidden">
+                          <span
+                            className="text-sm font-medium text-gray-700 truncate"
+                            title={displayName}
                           >
-                            <path d="M3 6h18"></path>
-                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-                          </svg>
-                        </button>
+                            {displayName}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {f.sizeString || formatBytes(f.size || 0)} •{" "}
+                            {new Date(f.lastModified).toLocaleString(
+                              locale === "zh" ? "zh-CN" : "en-US",
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 ml-4">
+                          <button
+                            onClick={() => handleDownloadFile(f)}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                            title={t("scanner.download") || "Download"}
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteFile(f.name)}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                            title={t("scanner.delete") || "Delete"}
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M3 6h18"></path>
+                              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                            </svg>
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -56,6 +56,14 @@ describe("DocumentPreview", () => {
     });
   });
 
+  it("uses a valid default paper size when dimensions are omitted", () => {
+    render(<DocumentPreview images={["scan.png"]} />);
+
+    expect(screen.getByTestId("preview-page-paper")).toHaveStyle({
+      aspectRatio: "595 / 842",
+    });
+  });
+
   it("renders loading state", () => {
     render(
       <DocumentPreview images={[]} loading={true} loadingText="Loading..." />,

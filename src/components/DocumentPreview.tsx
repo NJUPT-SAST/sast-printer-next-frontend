@@ -7,7 +7,7 @@ import { getOptimalLayout } from "@/lib/utils";
 
 GlobalWorkerOptions.workerSrc = pdfWorker;
 
-const A4_PREVIEW_SIZE = { width: 595, height: 842 };
+const A4_PREVIEW_SIZE = { pageWidth: 595, pageHeight: 842 };
 
 /* eslint-disable react-refresh/only-export-components */
 export interface PageDimensions {
@@ -81,18 +81,18 @@ export function DocumentPreview({
   const renderNupGrid = () => {
     if (!nup || nup <= 1) return null;
     const layout = getOptimalLayout(
-      pageDimensions?.[0]?.pageWidth ?? A4_PREVIEW_SIZE.width,
-      pageDimensions?.[0]?.pageHeight ?? A4_PREVIEW_SIZE.height,
+      pageDimensions?.[0]?.pageWidth ?? A4_PREVIEW_SIZE.pageWidth,
+      pageDimensions?.[0]?.pageHeight ?? A4_PREVIEW_SIZE.pageHeight,
       nup,
     );
     const cols = layout.cols;
     const rows = layout.rows;
     const sheetWidth = layout.rotate
-      ? A4_PREVIEW_SIZE.height
-      : A4_PREVIEW_SIZE.width;
+      ? A4_PREVIEW_SIZE.pageHeight
+      : A4_PREVIEW_SIZE.pageWidth;
     const sheetHeight = layout.rotate
-      ? A4_PREVIEW_SIZE.width
-      : A4_PREVIEW_SIZE.height;
+      ? A4_PREVIEW_SIZE.pageWidth
+      : A4_PREVIEW_SIZE.pageHeight;
     const perSheet = nup;
     const sheetCount = Math.ceil(images.length / perSheet);
     const sheets: JSX.Element[] = [];

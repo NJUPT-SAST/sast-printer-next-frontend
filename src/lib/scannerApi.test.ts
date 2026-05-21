@@ -13,7 +13,11 @@ import scannerApi, {
   submitScan,
   getScanFiles,
   deleteScanFile,
+  downloadScanFile,
+  getScanFileDisplayName,
+  isPdfScanFile,
   type ScanRequest,
+  type ScanFile,
 } from "./scannerApi";
 
 describe("scannerApi", () => {
@@ -89,5 +93,52 @@ describe("scannerApi", () => {
 
     await deleteScanFile(filename);
     expect(mock.history.delete[0].url).toBe(`/files/${filename}`);
+  });
+
+  it("downloadScanFile should infer MIME type from scan file metadata", async () => {
+    const file: ScanFile = {
+      fullname: "scan1.jpg",
+      extension: ".jpg",
+      lastModified: 123456789,
+      size: 4,
+      sizeString: "4 B",
+      isDirectory: false,
+      name: "scan1",
+      path: "/scan1.jpg",
+    };
+    mock
+      .onGet("/files/scan1")
+      .reply(
+        200,
+        new Blob(["fake"], { type: "application/octet-stream" }),
+        { "content-type": "application/octet-stream" },
+      );
+
+    const blob = await downloadScanFile(file);
+
+    expect(mock.history.get[0].url).toBe("/files/scan1");
+    expect(blob.type).toBe("image/jpeg");
+    expect(await blob.text()).toBe("fake");
+  });
+
+  it("getScanFileDisplayName should restore extension when name omits it", () => {
+    const file = {
+      fullname: "",
+      extension: ".png",
+      name: "scan1",
+    } as ScanFile;
+
+    expect(getScanFileDisplayName(file)).toBe("scan1.png");
+  });
+
+  it("isPdfScanFile should use scan file extension metadata", () => {
+    const file = {
+      fullname: "",
+      extension: ".pdf",
+      name: "scan1",
+      path: "/scan1.pdf",
+    } as ScanFile;
+
+    expect(isPdfScanFile(file)).toBe(true);
   });
 });

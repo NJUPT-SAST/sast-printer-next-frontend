@@ -71,6 +71,23 @@ export interface ScanFile {
   path: string;
 }
 
+const normalizeExtension = (extension?: string): string =>
+  extension?.replace(/^\./, "").toLowerCase() ?? "";
+
+export const getScanFileDisplayName = (file: ScanFile): string => {
+  if (file.fullname) return file.fullname;
+
+  const extension = normalizeExtension(file.extension);
+  if (!extension || file.name.toLowerCase().endsWith(`.${extension}`)) {
+    return file.name;
+  }
+
+  return `${file.name}.${extension}`;
+};
+
+const getScanFileRequestName = (file: ScanFile | string): string =>
+  typeof file === "string" ? file : file.name || file.fullname;
+
 export const getScanFiles = async (): Promise<ScanFile[]> => {
   const response = await scannerApi.get<ScanFile[]>("/files");
   return response.data;
@@ -103,9 +120,8 @@ export const submitScan = async (
   return response.data;
 };
 
-const getMimeTypeFromFilename = (filename: string): string => {
-  const ext = filename.split(".").pop()?.toLowerCase();
-  switch (ext) {
+const getMimeTypeFromExtension = (extension: string): string => {
+  switch (normalizeExtension(extension)) {
     case "pdf":
       return "application/pdf";
     case "png":
@@ -114,20 +130,91 @@ const getMimeTypeFromFilename = (filename: string): string => {
     case "jpeg":
       return "image/jpeg";
     default:
-      return "application/octet-stream";
+      return "";
   }
 };
 
+const getExtensionFromPath = (path: string): string => {
+  const filename = path.split("/").pop() ?? path;
+  const dotIndex = filename.lastIndexOf(".");
+  return dotIndex >= 0 ? filename.slice(dotIndex + 1) : "";
+};
+
+const getMimeTypeFromScanFile = (file: ScanFile | string): string => {
+  if (typeof file !== "string") {
+    return (
+      getMimeTypeFromExtension(file.extension) ||
+      getMimeTypeFromExtension(getExtensionFromPath(file.fullname)) ||
+      getMimeTypeFromExtension(getExtensionFromPath(file.path)) ||
+      getMimeTypeFromExtension(getExtensionFromPath(file.name)) ||
+      "application/octet-stream"
+    );
+  }
+
+  return (
+    getMimeTypeFromExtension(getExtensionFromPath(file)) ||
+    "application/octet-stream"
+  );
+};
+
+const normalizeMimeType = (mimeType?: string): string => {
+  const type = mimeType?.split(";")[0]?.trim().toLowerCase() ?? "";
+  return type && type !== "application/octet-stream" ? type : "";
+};
+
+export const isPdfScanFile = (file: ScanFile): boolean =>
+  getMimeTypeFromScanFile(file) === "application/pdf";
+
+const withBlobType = (blob: Blob, type: string): Blob => {
+  if (!type || blob.type === type) return blob;
+  return blob.slice(0, blob.size, type);
+};
+
+const getResponseContentType = (headers: unknown): string => {
+  if (!headers) return "";
+  const headerGetter = headers as {
+    get?: (name: string) => string | null;
+  };
+  if (typeof headerGetter.get === "function") {
+    return headerGetter.get("content-type") ?? "";
+  }
+  return (
+    (headers as Record<string, string | undefined>)["content-type"] ??
+    (headers as Record<string, string | undefined>)["Content-Type"] ??
+    ""
+  );
+};
+
+const getMimeTypeForDownloadedBlob = (
+  blob: Blob,
+  responseHeaders: unknown,
+  file: ScanFile | string,
+): string => {
+  const metadataMimeType = getMimeTypeFromScanFile(file);
+  return (
+    normalizeMimeType(metadataMimeType) ||
+    normalizeMimeType(blob.type) ||
+    normalizeMimeType(getResponseContentType(responseHeaders)) ||
+    metadataMimeType
+  );
+};
+
 export const downloadScanFile = async (
-  filename: string,
+  file: ScanFile | string,
   onProgress?: (event: { loaded: number; total?: number }) => void,
 ): Promise<Blob> => {
+  const filename = getScanFileRequestName(file);
   const response = await scannerApi.get<Blob>(`/files/${filename}`, {
     responseType: "blob",
     onDownloadProgress: (e) =>
       onProgress?.({ loaded: e.loaded, total: e.total }),
   });
-  return new Blob([response.data], { type: getMimeTypeFromFilename(filename) });
+  const responseBlob =
+    response.data instanceof Blob ? response.data : new Blob([response.data]);
+  return withBlobType(
+    responseBlob,
+    getMimeTypeForDownloadedBlob(responseBlob, response.headers, file),
+  );
 };
 
 export default scannerApi;
