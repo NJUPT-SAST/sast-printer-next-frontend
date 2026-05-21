@@ -121,6 +121,33 @@ describe("scannerApi", () => {
     expect(await blob.text()).toBe("fake");
   });
 
+  it("downloadScanFile should prefer byte signature over metadata", async () => {
+    const file: ScanFile = {
+      fullname: "scan1.jpg",
+      extension: ".jpg",
+      lastModified: 123456789,
+      size: 12,
+      sizeString: "12 B",
+      isDirectory: false,
+      name: "scan1",
+      path: "/scan1.jpg",
+    };
+    const pngSignature = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+    ]);
+    mock
+      .onGet("/files/scan1")
+      .reply(
+        200,
+        new Blob([pngSignature], { type: "application/octet-stream" }),
+        { "content-type": "application/octet-stream" },
+      );
+
+    const blob = await downloadScanFile(file);
+
+    expect(blob.type).toBe("image/png");
+  });
+
   it("getScanFileDisplayName should restore extension when name omits it", () => {
     const file = {
       fullname: "",

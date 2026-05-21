@@ -157,6 +157,61 @@ const getMimeTypeFromScanFile = (file: ScanFile | string): string => {
   );
 };
 
+const getMimeTypeFromBlobSignature = async (blob: Blob): Promise<string> => {
+  const bytes = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
+  if (bytes.length < 4) return "";
+
+  if (
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47
+  ) {
+    return "image/png";
+  }
+
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg";
+  }
+
+  if (
+    bytes[0] === 0x25 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x44 &&
+    bytes[3] === 0x46
+  ) {
+    return "application/pdf";
+  }
+
+  if (
+    bytes[0] === 0x47 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x38
+  ) {
+    return "image/gif";
+  }
+
+  if (bytes[0] === 0x42 && bytes[1] === 0x4d) {
+    return "image/bmp";
+  }
+
+  if (
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+
+  return "";
+};
+
 const normalizeMimeType = (mimeType?: string): string => {
   const type = mimeType?.split(";")[0]?.trim().toLowerCase() ?? "";
   return type && type !== "application/octet-stream" ? type : "";
@@ -189,9 +244,11 @@ const getMimeTypeForDownloadedBlob = (
   blob: Blob,
   responseHeaders: unknown,
   file: ScanFile | string,
+  signatureMimeType: string,
 ): string => {
   const metadataMimeType = getMimeTypeFromScanFile(file);
   return (
+    normalizeMimeType(signatureMimeType) ||
     normalizeMimeType(metadataMimeType) ||
     normalizeMimeType(blob.type) ||
     normalizeMimeType(getResponseContentType(responseHeaders)) ||
@@ -211,9 +268,15 @@ export const downloadScanFile = async (
   });
   const responseBlob =
     response.data instanceof Blob ? response.data : new Blob([response.data]);
+  const signatureMimeType = await getMimeTypeFromBlobSignature(responseBlob);
   return withBlobType(
     responseBlob,
-    getMimeTypeForDownloadedBlob(responseBlob, response.headers, file),
+    getMimeTypeForDownloadedBlob(
+      responseBlob,
+      response.headers,
+      file,
+      signatureMimeType,
+    ),
   );
 };
 

@@ -33,8 +33,164 @@ import {
 import {
   DocumentPreview,
   renderPdfToImages,
+  type PageDimensions,
 } from "@/components/DocumentPreview";
 import Select from "@/components/Select";
+
+const IMAGE_PREVIEW_MAX_EDGE = 2400;
+const IMAGE_PREVIEW_MAX_PIXELS = 5_000_000;
+
+const readUint16BE = (bytes: Uint8Array, offset: number): number =>
+  (bytes[offset] << 8) + bytes[offset + 1];
+
+const readUint32BE = (bytes: Uint8Array, offset: number): number =>
+  (bytes[offset] << 24) |
+  (bytes[offset + 1] << 16) |
+  (bytes[offset + 2] << 8) |
+  bytes[offset + 3];
+
+const readPngDimensions = (bytes: Uint8Array): PageDimensions | null => {
+  if (
+    bytes.length < 24 ||
+    bytes[0] !== 0x89 ||
+    bytes[1] !== 0x50 ||
+    bytes[2] !== 0x4e ||
+    bytes[3] !== 0x47
+  ) {
+    return null;
+  }
+
+  return {
+    pageWidth: readUint32BE(bytes, 16),
+    pageHeight: readUint32BE(bytes, 20),
+  };
+};
+
+const readJpegDimensions = (bytes: Uint8Array): PageDimensions | null => {
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+    return null;
+  }
+
+  let offset = 2;
+  while (offset + 9 < bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+
+    const marker = bytes[offset + 1];
+    offset += 2;
+
+    if (marker === 0xd8 || marker === 0xd9) continue;
+    if (marker >= 0xd0 && marker <= 0xd7) continue;
+    if (offset + 2 > bytes.length) break;
+
+    const segmentLength = readUint16BE(bytes, offset);
+    if (segmentLength < 2 || offset + segmentLength > bytes.length) break;
+
+    const isStartOfFrame =
+      (marker >= 0xc0 && marker <= 0xc3) ||
+      (marker >= 0xc5 && marker <= 0xc7) ||
+      (marker >= 0xc9 && marker <= 0xcb) ||
+      (marker >= 0xcd && marker <= 0xcf);
+
+    if (isStartOfFrame && segmentLength >= 7) {
+      return {
+        pageWidth: readUint16BE(bytes, offset + 5),
+        pageHeight: readUint16BE(bytes, offset + 3),
+      };
+    }
+
+    offset += segmentLength;
+  }
+
+  return null;
+};
+
+const readImageDimensions = async (
+  blob: Blob,
+): Promise<PageDimensions | null> => {
+  const bytes = new Uint8Array(await blob.slice(0, 65536).arrayBuffer());
+  return readPngDimensions(bytes) || readJpegDimensions(bytes);
+};
+
+const getPreviewSize = ({ pageWidth, pageHeight }: PageDimensions) => {
+  const scale = Math.min(
+    1,
+    IMAGE_PREVIEW_MAX_EDGE / pageWidth,
+    IMAGE_PREVIEW_MAX_EDGE / pageHeight,
+    Math.sqrt(IMAGE_PREVIEW_MAX_PIXELS / (pageWidth * pageHeight)),
+  );
+
+  return {
+    width: Math.max(1, Math.round(pageWidth * scale)),
+    height: Math.max(1, Math.round(pageHeight * scale)),
+    scaled: scale < 1,
+  };
+};
+
+const canvasToBlob = (
+  canvas: HTMLCanvasElement,
+  type: string,
+  quality?: number,
+): Promise<Blob> =>
+  new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error("canvas.toBlob failed"));
+        }
+      },
+      type,
+      quality,
+    );
+  });
+
+const createImagePreviewUrl = async (
+  blob: Blob,
+  originalUrl: string,
+): Promise<{ url: string; dimensions?: PageDimensions }> => {
+  if (!blob.type.startsWith("image/")) return { url: originalUrl };
+
+  let dimensions: PageDimensions | null = null;
+  try {
+    dimensions = await readImageDimensions(blob);
+  } catch (error) {
+    console.warn("Failed to inspect scan image dimensions", error);
+  }
+
+  if (!dimensions) return { url: originalUrl };
+
+  const previewSize = getPreviewSize(dimensions);
+  if (!previewSize.scaled || !("createImageBitmap" in window)) {
+    return { url: originalUrl, dimensions };
+  }
+
+  let bitmap: ImageBitmap | null = null;
+  try {
+    bitmap = await createImageBitmap(blob, {
+      resizeWidth: previewSize.width,
+      resizeHeight: previewSize.height,
+      resizeQuality: "high",
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = previewSize.width;
+    canvas.height = previewSize.height;
+    const context = canvas.getContext("2d");
+    if (!context) return { url: originalUrl, dimensions };
+
+    context.drawImage(bitmap, 0, 0, previewSize.width, previewSize.height);
+    const previewBlob = await canvasToBlob(canvas, "image/jpeg", 0.9);
+    return { url: URL.createObjectURL(previewBlob), dimensions };
+  } catch (error) {
+    console.warn("Failed to generate resized scan preview", error);
+    return { url: originalUrl, dimensions };
+  } finally {
+    bitmap?.close();
+  }
+};
 
 export default function ScannerPage() {
   const { t, locale } = useTranslation();
@@ -184,12 +340,25 @@ export default function ScannerPage() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [previewFilename, setPreviewFilename] = useState<string | null>(null);
   const [previewImages, setPreviewImages] = useState<string[]>([]);
+  const [previewPageDimensions, setPreviewPageDimensions] = useState<
+    PageDimensions[]
+  >([]);
 
   useEffect(() => {
     return () => {
       if (imageUrl) URL.revokeObjectURL(imageUrl);
     };
   }, [imageUrl]);
+
+  useEffect(() => {
+    const previewObjectUrls = previewImages.filter(
+      (url) => url.startsWith("blob:") && url !== imageUrl,
+    );
+
+    return () => {
+      previewObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [imageUrl, previewImages]);
 
   const formatBytes = (bytes: number, decimals = 2) => {
     if (!+bytes) return "0 B";
@@ -250,20 +419,30 @@ export default function ScannerPage() {
           }
         });
 
-        setDownloadingFile(false);
         const objectUrl = URL.createObjectURL(fileBlob);
-        setImageUrl(objectUrl);
 
         if (isPdfScanFile(scannedFile) || fileBlob.type === "application/pdf") {
+          setImageUrl(objectUrl);
+          setDownloadingFile(false);
           try {
-            const { images } = await renderPdfToImages(fileBlob);
+            const { images, pageDimensions } = await renderPdfToImages(
+              fileBlob,
+            );
             setPreviewImages(images);
+            setPreviewPageDimensions(pageDimensions);
           } catch (e) {
             console.error("Failed to render PDF to images", e);
             setPreviewImages([]);
+            setPreviewPageDimensions([]);
           }
         } else {
-          setPreviewImages([objectUrl]);
+          const preview = await createImagePreviewUrl(fileBlob, objectUrl);
+          setImageUrl(objectUrl);
+          setPreviewImages([preview.url]);
+          setPreviewPageDimensions(
+            preview.dimensions ? [preview.dimensions] : [],
+          );
+          setDownloadingFile(false);
         }
         toast({
           message: t("scanner.success") || "Scan completed successfully",
@@ -867,6 +1046,7 @@ export default function ScannerPage() {
             ) : (
               <DocumentPreview
                 images={previewImages}
+                pageDimensions={previewPageDimensions}
                 fallbackNode={
                   imageUrl ? (
                     <object
