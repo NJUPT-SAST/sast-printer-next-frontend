@@ -37,8 +37,8 @@ import {
 } from "@/components/DocumentPreview";
 import Select from "@/components/Select";
 
-const IMAGE_PREVIEW_MAX_EDGE = 2400;
-const IMAGE_PREVIEW_MAX_PIXELS = 5_000_000;
+const IMAGE_PREVIEW_MAX_EDGE = 1800;
+const IMAGE_PREVIEW_MAX_PIXELS = 2_500_000;
 
 const readUint16BE = (bytes: Uint8Array, offset: number): number =>
   (bytes[offset] << 8) + bytes[offset + 1];
@@ -129,30 +129,44 @@ const getPreviewSize = ({ pageWidth, pageHeight }: PageDimensions) => {
   };
 };
 
-const canvasToBlob = (
-  canvas: HTMLCanvasElement,
-  type: string,
-  quality?: number,
-): Promise<Blob> =>
-  new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (blob) {
-          resolve(blob);
-        } else {
-          reject(new Error("canvas.toBlob failed"));
-        }
-      },
-      type,
-      quality,
-    );
+const canEmbedImageInPdf = (blob: Blob): boolean =>
+  blob.type === "image/png" || blob.type === "image/jpeg";
+
+const createImagePreviewPdf = async (
+  blob: Blob,
+  fallbackDimensions?: PageDimensions | null,
+): Promise<Blob> => {
+  const { PDFDocument } = await import("pdf-lib");
+  const pdf = await PDFDocument.create();
+  const bytes = await blob.arrayBuffer();
+  const image =
+    blob.type === "image/png"
+      ? await pdf.embedPng(bytes)
+      : await pdf.embedJpg(bytes);
+  const originalDimensions = fallbackDimensions ?? {
+    pageWidth: image.width,
+    pageHeight: image.height,
+  };
+  const previewSize = getPreviewSize(originalDimensions);
+  const page = pdf.addPage([previewSize.width, previewSize.height]);
+  page.drawImage(image, {
+    x: 0,
+    y: 0,
+    width: previewSize.width,
+    height: previewSize.height,
   });
 
-const createImagePreviewUrl = async (
+  const pdfBytes = await pdf.save();
+  return new Blob([pdfBytes], { type: "application/pdf" });
+};
+
+const renderImageForPreview = async (
   blob: Blob,
   originalUrl: string,
-): Promise<{ url: string; dimensions?: PageDimensions }> => {
-  if (!blob.type.startsWith("image/")) return { url: originalUrl };
+): Promise<{ images: string[]; pageDimensions: PageDimensions[] }> => {
+  if (!blob.type.startsWith("image/")) {
+    return { images: [originalUrl], pageDimensions: [] };
+  }
 
   let dimensions: PageDimensions | null = null;
   try {
@@ -161,35 +175,25 @@ const createImagePreviewUrl = async (
     console.warn("Failed to inspect scan image dimensions", error);
   }
 
-  if (!dimensions) return { url: originalUrl };
-
-  const previewSize = getPreviewSize(dimensions);
-  if (!previewSize.scaled || !("createImageBitmap" in window)) {
-    return { url: originalUrl, dimensions };
+  if (canEmbedImageInPdf(blob)) {
+    try {
+      const previewPdf = await createImagePreviewPdf(blob, dimensions);
+      const rendered = await renderPdfToImages(previewPdf, { scale: 1 });
+      if (rendered.images.length > 0) {
+        return {
+          images: rendered.images,
+          pageDimensions: rendered.pageDimensions,
+        };
+      }
+    } catch (error) {
+      console.warn("Failed to render scan image through PDF preview", error);
+    }
   }
 
-  let bitmap: ImageBitmap | null = null;
-  try {
-    bitmap = await createImageBitmap(blob, {
-      resizeWidth: previewSize.width,
-      resizeHeight: previewSize.height,
-      resizeQuality: "high",
-    });
-    const canvas = document.createElement("canvas");
-    canvas.width = previewSize.width;
-    canvas.height = previewSize.height;
-    const context = canvas.getContext("2d");
-    if (!context) return { url: originalUrl, dimensions };
-
-    context.drawImage(bitmap, 0, 0, previewSize.width, previewSize.height);
-    const previewBlob = await canvasToBlob(canvas, "image/jpeg", 0.9);
-    return { url: URL.createObjectURL(previewBlob), dimensions };
-  } catch (error) {
-    console.warn("Failed to generate resized scan preview", error);
-    return { url: originalUrl, dimensions };
-  } finally {
-    bitmap?.close();
-  }
+  return {
+    images: [originalUrl],
+    pageDimensions: dimensions ? [dimensions] : [],
+  };
 };
 
 export default function ScannerPage() {
@@ -436,12 +440,10 @@ export default function ScannerPage() {
             setPreviewPageDimensions([]);
           }
         } else {
-          const preview = await createImagePreviewUrl(fileBlob, objectUrl);
+          const preview = await renderImageForPreview(fileBlob, objectUrl);
           setImageUrl(objectUrl);
-          setPreviewImages([preview.url]);
-          setPreviewPageDimensions(
-            preview.dimensions ? [preview.dimensions] : [],
-          );
+          setPreviewImages(preview.images);
+          setPreviewPageDimensions(preview.pageDimensions);
           setDownloadingFile(false);
         }
         toast({

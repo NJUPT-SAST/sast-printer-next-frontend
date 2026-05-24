@@ -15,7 +15,10 @@ export interface PageDimensions {
   pageHeight: number;
 }
 
-export const renderPdfToImages = async (blob: Blob) => {
+export const renderPdfToImages = async (
+  blob: Blob,
+  options?: { scale?: number },
+) => {
   const data = await blob.arrayBuffer();
   const task = getDocument({ data });
   const doc = await task.promise;
@@ -25,7 +28,7 @@ export const renderPdfToImages = async (blob: Blob) => {
 
   for (let pageNum = 1; pageNum <= totalPages; pageNum += 1) {
     const page = await doc.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 1.2 });
+    const viewport = page.getViewport({ scale: options?.scale ?? 1.2 });
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
 
