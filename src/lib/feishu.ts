@@ -39,6 +39,13 @@ interface JSSDKConfigResponse {
   signature: string;
 }
 
+interface CachedJSSDKConfig extends JSSDKConfigResponse {
+  pageURL: string;
+  cachedAt: number;
+}
+
+const JSSDK_CONFIG_CACHE_PREFIX = "feishu:jssdk-config:";
+
 declare global {
   interface Window {
     tt?: {
@@ -60,6 +67,65 @@ export function isInFeishu(): boolean {
 
 let configPromise: Promise<void> | null = null;
 
+function getJSSDKConfigCacheKey(pageURL: string): string {
+  return `${JSSDK_CONFIG_CACHE_PREFIX}${pageURL}`;
+}
+
+function readCachedJSSDKConfig(pageURL: string): JSSDKConfigResponse | null {
+  try {
+    const raw = window.localStorage.getItem(getJSSDKConfigCacheKey(pageURL));
+    if (!raw) return null;
+
+    const cached = JSON.parse(raw) as Partial<CachedJSSDKConfig>;
+    if (
+      cached.pageURL !== pageURL ||
+      typeof cached.appId !== "string" ||
+      typeof cached.timestamp !== "string" ||
+      typeof cached.nonceStr !== "string" ||
+      typeof cached.signature !== "string"
+    ) {
+      return null;
+    }
+
+    return {
+      appId: cached.appId,
+      timestamp: cached.timestamp,
+      nonceStr: cached.nonceStr,
+      signature: cached.signature,
+    };
+  } catch {
+    window.localStorage.removeItem(getJSSDKConfigCacheKey(pageURL));
+    return null;
+  }
+}
+
+function saveJSSDKConfigCache(
+  pageURL: string,
+  data: JSSDKConfigResponse,
+): void {
+  try {
+    const cached: CachedJSSDKConfig = {
+      ...data,
+      pageURL,
+      cachedAt: Date.now(),
+    };
+    window.localStorage.setItem(
+      getJSSDKConfigCacheKey(pageURL),
+      JSON.stringify(cached),
+    );
+  } catch {
+    // Ignore storage failures and fall back to in-memory config.
+  }
+}
+
+function clearJSSDKConfigCache(pageURL: string): void {
+  try {
+    window.localStorage.removeItem(getJSSDKConfigCacheKey(pageURL));
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
 async function ensureJSAPIConfig(): Promise<void> {
   if (configPromise) return configPromise;
 
@@ -68,14 +134,19 @@ async function ensureJSAPIConfig(): Promise<void> {
     if (!h5sdk?.config) return;
 
     const pageURL = window.location.href.split("#")[0];
-    const resp = await api.get<JSSDKConfigResponse>(
-      "/auth/config/jssdk-config",
-      {
-        params: { url: pageURL },
-        timeout: 10000,
-      },
-    );
-    const data = resp.data;
+    const cachedData = readCachedJSSDKConfig(pageURL);
+    const data =
+      cachedData ??
+      (
+        await api.get<JSSDKConfigResponse>("/auth/config/jssdk-config", {
+          params: { url: pageURL },
+          timeout: 10000,
+        })
+      ).data;
+
+    if (!cachedData) {
+      saveJSSDKConfigCache(pageURL, data);
+    }
 
     await new Promise<void>((resolve, reject) => {
       const onReady = () => resolve();
@@ -91,7 +162,7 @@ async function ensureJSAPIConfig(): Promise<void> {
       };
       h5sdk.ready?.(onReady);
       h5sdk.error?.(onError);
-      h5sdk.config({
+      h5sdk.config?.({
         appId: data.appId,
         timestamp: Number(data.timestamp),
         nonceStr: data.nonceStr,
@@ -106,6 +177,7 @@ async function ensureJSAPIConfig(): Promise<void> {
   try {
     await configPromise;
   } catch (err) {
+    clearJSSDKConfigCache(window.location.href.split("#")[0]);
     configPromise = null;
     throw err;
   }
