@@ -50,6 +50,8 @@ import {
 } from "@/lib/feishu";
 import { MAX_IMAGES, MAX_BATCH_FILES, type BatchType } from "@/lib/constants";
 
+const PREVIEW_REQUEST_TIMEOUT_MS = 120_000;
+
 interface PrinterInfo {
   id: string;
   name: string;
@@ -488,6 +490,7 @@ function PrinterContent() {
             },
             responseType: "blob",
             signal: controller.signal,
+            timeout: PREVIEW_REQUEST_TIMEOUT_MS,
           });
         } else {
           response = await api.post(
@@ -496,6 +499,7 @@ function PrinterContent() {
             {
               responseType: "blob",
               signal: controller.signal,
+              timeout: PREVIEW_REQUEST_TIMEOUT_MS,
             },
           );
         }
