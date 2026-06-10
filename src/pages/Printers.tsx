@@ -52,6 +52,18 @@ import { MAX_IMAGES, MAX_BATCH_FILES, type BatchType } from "@/lib/constants";
 
 const PREVIEW_REQUEST_TIMEOUT_MS = 120_000;
 
+interface ActiveJobWarning {
+  type: string;
+  message?: string;
+  job_id?: string;
+  printer_id?: string;
+  file_name?: string;
+  status?: string;
+  user_name?: string;
+  submitted_at?: string;
+  hook_expires_at?: string;
+}
+
 interface PrinterInfo {
   id: string;
   name: string;
@@ -61,7 +73,19 @@ interface PrinterInfo {
   location: string;
   duplex_mode: string;
   note?: string;
+  active_job_warning?: ActiveJobWarning;
 }
+
+const activeJobWarningKey = (
+  printerID: string | null,
+  warning: ActiveJobWarning,
+) =>
+  [
+    printerID || warning.printer_id || "",
+    warning.type || "",
+    warning.job_id || "",
+    warning.hook_expires_at || warning.submitted_at || warning.status || "",
+  ].join(":");
 
 interface SupportedFileTypesResponse {
   supported_file_types: string[];
@@ -234,6 +258,7 @@ function PrinterContent() {
   const dragCounter = useRef(0);
   const REFRESH_COOLDOWN = 1000;
   const lastRefreshRef = useRef(0);
+  const acknowledgedPrinterWarningsRef = useRef<Set<string>>(new Set());
 
   const acceptValue = supportedFileTypes.map((ext) => `.${ext}`).join(",");
   const supportedTypesText = supportedFileTypes
@@ -655,10 +680,29 @@ function PrinterContent() {
 
     const fetchPrinter = async () => {
       try {
-        const response = await api.get(`/printers/${id}`);
-        setPrinter(response.data);
+        const response = await api.get<PrinterInfo>(`/printers/${id}`);
+        const printerInfo = response.data;
+        setPrinter(printerInfo);
         const saved = localStorage.getItem("duplex_preference");
         setDuplex(saved ?? "");
+
+        const warning = printerInfo.active_job_warning;
+        if (warning) {
+          const warningKey = activeJobWarningKey(id, warning);
+          if (!acknowledgedPrinterWarningsRef.current.has(warningKey)) {
+            confirm({
+              title: t("printer.activeJobWarningTitle"),
+              message:
+                warning.message || t("printer.activeJobWarningFallback"),
+              confirmText: t("printer.ignoreAndPrint"),
+              cancelText: t("printer.warningBack"),
+              onConfirm: () => {
+                acknowledgedPrinterWarningsRef.current.add(warningKey);
+              },
+              onCancel: () => router("/printers"),
+            });
+          }
+        }
       } catch (err: unknown) {
         setError(apiErrMsg(err, t("error.fetchPrinters")));
       } finally {
@@ -679,7 +723,7 @@ function PrinterContent() {
     };
 
     init();
-  }, [id, t]);
+  }, [confirm, id, router, t]);
 
   const handleAddImages = (incoming: File[]) => {
     const valid = incoming.filter(isImageFile);
