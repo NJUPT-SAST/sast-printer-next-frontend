@@ -30,6 +30,7 @@ interface PrintJob {
   submitted_at: string;
   duplex_hook?: string;
   hook_expires_at?: string;
+  hook_extend_window_seconds?: number;
 }
 
 interface JobsModalProps {
@@ -38,7 +39,7 @@ interface JobsModalProps {
 
 export default function JobsModal({ onClose }: JobsModalProps) {
   const { t, locale } = useTranslation();
-  const { toast } = useUi();
+  const { toast, confirm } = useUi();
   const [jobs, setJobs] = useState<PrintJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -48,9 +49,11 @@ export default function JobsModal({ onClose }: JobsModalProps) {
   const [manualDuplexHook, setManualDuplexHook] = useState<{
     url: string;
     expiresAt: string;
+    extendWindowSeconds?: number;
   } | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [submittingDuplex, setSubmittingDuplex] = useState(false);
+  const [extendingDuplex, setExtendingDuplex] = useState(false);
 
   const fetchJobs = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -106,6 +109,13 @@ export default function JobsModal({ onClose }: JobsModalProps) {
     return () => clearInterval(id);
   }, [fetchJobs]);
 
+  const duplexActionInProgress = submittingDuplex || extendingDuplex;
+  const canExtendManualDuplex =
+    !!manualDuplexHook &&
+    timeLeft !== null &&
+    timeLeft > 0 &&
+    timeLeft <= (manualDuplexHook.extendWindowSeconds ?? 180) * 1000;
+
   const handleContinueDuplex = async () => {
     if (!manualDuplexHook) return;
     setSubmittingDuplex(true);
@@ -137,6 +147,39 @@ export default function JobsModal({ onClose }: JobsModalProps) {
       setSubmittingDuplex(false);
       fetchJobs(true);
     }
+  };
+
+  const handleExtendDuplex = () => {
+    if (!manualDuplexHook || !canExtendManualDuplex) return;
+
+    confirm({
+      title: t("printer.extendDuplexConfirmTitle"),
+      message: t("printer.extendDuplexConfirmMsg"),
+      confirmText: t("printer.extendDuplex"),
+      onConfirm: async () => {
+        if (!manualDuplexHook) return;
+        setExtendingDuplex(true);
+        try {
+          const response = await api.post(
+            manualDuplexHook.url.replace("/continue", "/extend"),
+          );
+          setManualDuplexHook({
+            url: manualDuplexHook.url,
+            expiresAt: response.data.hook_expires_at,
+            extendWindowSeconds: response.data.hook_extend_window_seconds,
+          });
+          toast({ message: t("printer.duplexExtended"), type: "success" });
+          fetchJobs(true);
+        } catch (err: unknown) {
+          toast({
+            message: `${t("error.submit")}: ${apiErrMsg(err, t("error.submit"))}`,
+            type: "error",
+          });
+        } finally {
+          setExtendingDuplex(false);
+        }
+      },
+    });
   };
 
   const statusColors: Record<string, string> = {
@@ -193,18 +236,37 @@ export default function JobsModal({ onClose }: JobsModalProps) {
                   </span>
                 </div>
               )}
-              <div className="flex w-full space-x-3">
+              <div
+                className={
+                  canExtendManualDuplex
+                    ? "grid w-full grid-cols-1 gap-3 sm:grid-cols-3"
+                    : "grid w-full grid-cols-1 gap-3 sm:grid-cols-2"
+                }
+              >
                 <button
                   onClick={handleCancelDuplex}
-                  disabled={submittingDuplex}
-                  className="flex-1 py-3 px-4 rounded-xl border border-gray-300 font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  disabled={duplexActionInProgress}
+                  className="py-3 px-4 rounded-xl border border-gray-300 font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
                   {t("common.cancel")}
                 </button>
+                {canExtendManualDuplex && (
+                  <button
+                    onClick={handleExtendDuplex}
+                    disabled={duplexActionInProgress}
+                    className="py-3 px-4 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 font-medium hover:bg-blue-100 transition-colors disabled:opacity-50 flex items-center justify-center"
+                  >
+                    {extendingDuplex ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      t("printer.extendDuplex")
+                    )}
+                  </button>
+                )}
                 <button
                   onClick={handleContinueDuplex}
-                  disabled={submittingDuplex}
-                  className="flex-1 py-3 px-4 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center"
+                  disabled={duplexActionInProgress}
+                  className="py-3 px-4 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center"
                 >
                   {submittingDuplex ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -369,6 +431,8 @@ export default function JobsModal({ onClose }: JobsModalProps) {
                               setManualDuplexHook({
                                 url: job.duplex_hook!,
                                 expiresAt: job.hook_expires_at!,
+                                extendWindowSeconds:
+                                  job.hook_extend_window_seconds,
                               })
                             }
                             className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm active:scale-95"

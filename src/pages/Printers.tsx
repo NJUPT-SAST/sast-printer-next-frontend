@@ -78,7 +78,7 @@ const MAX_SCALE = 400;
 
 function PrinterContent() {
   const { t } = useTranslation();
-  const { toast } = useUi();
+  const { toast, confirm } = useUi();
   const router = useNavigate();
   const [searchParams] = useSearchParams();
   const id = searchParams.get("id");
@@ -225,9 +225,11 @@ function PrinterContent() {
   const [manualDuplexHook, setManualDuplexHook] = useState<{
     url: string;
     expiresAt: string;
+    extendWindowSeconds?: number;
   } | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [submittingDuplex, setSubmittingDuplex] = useState(false);
+  const [extendingDuplex, setExtendingDuplex] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
   const REFRESH_COOLDOWN = 1000;
@@ -438,6 +440,13 @@ function PrinterContent() {
       setTimeLeft(null); // eslint-disable-line react-hooks/set-state-in-effect -- reset derived timer
     }
   }, [manualDuplexHook]);
+
+  const duplexActionInProgress = submittingDuplex || extendingDuplex;
+  const canExtendManualDuplex =
+    !!manualDuplexHook &&
+    timeLeft !== null &&
+    timeLeft > 0 &&
+    timeLeft <= (manualDuplexHook.extendWindowSeconds ?? 180) * 1000;
 
   const hasDocument =
     sourceTab === "file"
@@ -1147,6 +1156,7 @@ function PrinterContent() {
           setManualDuplexHook({
             url: response.data.hook_url,
             expiresAt: response.data.hook_expires_at,
+            extendWindowSeconds: response.data.hook_extend_window_seconds,
           });
           toast({ message: t("printer.manualDuplexWait"), type: "success" });
         } else {
@@ -1178,6 +1188,7 @@ function PrinterContent() {
           setManualDuplexHook({
             url: response.data.hook_url,
             expiresAt: response.data.hook_expires_at,
+            extendWindowSeconds: response.data.hook_extend_window_seconds,
           });
           toast({ message: t("printer.manualDuplexWait"), type: "success" });
         } else {
@@ -1433,6 +1444,38 @@ function PrinterContent() {
     }
   };
 
+  const handleExtendDuplex = () => {
+    if (!manualDuplexHook || !canExtendManualDuplex) return;
+
+    confirm({
+      title: t("printer.extendDuplexConfirmTitle"),
+      message: t("printer.extendDuplexConfirmMsg"),
+      confirmText: t("printer.extendDuplex"),
+      onConfirm: async () => {
+        if (!manualDuplexHook) return;
+        setExtendingDuplex(true);
+        try {
+          const response = await api.post(
+            manualDuplexHook.url.replace("/continue", "/extend"),
+          );
+          setManualDuplexHook({
+            url: manualDuplexHook.url,
+            expiresAt: response.data.hook_expires_at,
+            extendWindowSeconds: response.data.hook_extend_window_seconds,
+          });
+          toast({ message: t("printer.duplexExtended"), type: "success" });
+        } catch (err: unknown) {
+          toast({
+            message: `${t("error.submit")}: ${apiErrMsg(err, t("error.submit"))}`,
+            type: "error",
+          });
+        } finally {
+          setExtendingDuplex(false);
+        }
+      },
+    });
+  };
+
   const handleDownloadPreview = () => {
     if (!previewPdfUrl) return;
     const selectedIdx = Math.min(previewIndex, batchFiles.length - 1);
@@ -1541,18 +1584,37 @@ function PrinterContent() {
                   </span>
                 </div>
               )}
-              <div className="flex w-full space-x-3">
+              <div
+                className={
+                  canExtendManualDuplex
+                    ? "grid w-full grid-cols-1 gap-3 sm:grid-cols-3"
+                    : "grid w-full grid-cols-1 gap-3 sm:grid-cols-2"
+                }
+              >
                 <button
                   onClick={handleCancelDuplex}
-                  disabled={submittingDuplex}
-                  className="flex-1 py-3 px-4 rounded-xl border border-gray-300 font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 transition-colors disabled:opacity-50"
+                  disabled={duplexActionInProgress}
+                  className="py-3 px-4 rounded-xl border border-gray-300 font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200 transition-colors disabled:opacity-50"
                 >
                   {t("common.cancel")}
                 </button>
+                {canExtendManualDuplex && (
+                  <button
+                    onClick={handleExtendDuplex}
+                    disabled={duplexActionInProgress}
+                    className="py-3 px-4 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 font-medium hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-colors disabled:opacity-50 flex items-center justify-center"
+                  >
+                    {extendingDuplex ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      t("printer.extendDuplex")
+                    )}
+                  </button>
+                )}
                 <button
                   onClick={handleContinueDuplex}
-                  disabled={submittingDuplex}
-                  className="flex-1 py-3 px-4 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors disabled:opacity-50 flex items-center justify-center"
+                  disabled={duplexActionInProgress}
+                  className="py-3 px-4 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors disabled:opacity-50 flex items-center justify-center"
                 >
                   {submittingDuplex ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
