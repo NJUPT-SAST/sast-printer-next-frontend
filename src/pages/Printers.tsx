@@ -87,6 +87,9 @@ const activeJobWarningKey = (
     warning.hook_expires_at || warning.submitted_at || warning.status || "",
   ].join(":");
 
+const activeJobWarningUser = (warning: ActiveJobWarning) =>
+  warning.user_name?.trim() || "";
+
 interface SupportedFileTypesResponse {
   supported_file_types: string[];
   count: number;
@@ -690,10 +693,20 @@ function PrinterContent() {
         if (warning) {
           const warningKey = activeJobWarningKey(id, warning);
           if (!acknowledgedPrinterWarningsRef.current.has(warningKey)) {
+            const userName = activeJobWarningUser(warning);
             confirm({
               title: t("printer.activeJobWarningTitle"),
-              message:
-                warning.message || t("printer.activeJobWarningFallback"),
+              message: (
+                <div className="space-y-2">
+                  <p className="font-semibold text-gray-900">
+                    {t("printer.activeJobWarningLead", {
+                      user: userName || t("printer.activeJobWarningSomeone"),
+                    })}
+                  </p>
+                  <p>{t("printer.activeJobWarningFalsePositive")}</p>
+                  <p>{t("printer.activeJobWarningInstruction")}</p>
+                </div>
+              ),
               confirmText: t("printer.ignoreAndPrint"),
               cancelText: t("printer.warningBack"),
               onConfirm: () => {

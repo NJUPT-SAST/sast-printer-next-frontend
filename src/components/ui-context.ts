@@ -1,4 +1,5 @@
 import { createContext, useContext } from "react";
+import type { ReactNode } from "react";
 
 export type ToastType = "success" | "error" | "info";
 
@@ -10,7 +11,7 @@ export interface ToastOptions {
 
 export interface ConfirmOptions {
   title?: string;
-  message: string;
+  message: ReactNode;
   confirmText?: string;
   cancelText?: string;
   onConfirm: () => void | Promise<void>;
