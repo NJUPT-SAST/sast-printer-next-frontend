@@ -51,3 +51,7 @@ PROGRESS.txt
 .agents
 .claude
 skills-lock.json
+
+# documentation and notes (not for version control)
+docs/superpowers/specs/
+
