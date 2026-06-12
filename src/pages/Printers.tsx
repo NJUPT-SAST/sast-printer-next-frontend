@@ -1313,7 +1313,7 @@ function PrinterContent() {
           url: feishuUrl.trim(),
           printer_id: id || "",
           copies,
-          scale,
+          scale: scaleParam,
           collate: collate === "true",
         };
         if (duplex !== "off") {
