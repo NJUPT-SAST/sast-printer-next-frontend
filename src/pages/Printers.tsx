@@ -49,6 +49,7 @@ import {
   disableLeaveConfirm,
 } from "@/lib/feishu";
 import { MAX_IMAGES, MAX_BATCH_FILES, type BatchType } from "@/lib/constants";
+import { track } from "@/lib/analytics";
 
 const PREVIEW_REQUEST_TIMEOUT_MS = 120_000;
 
@@ -450,13 +451,22 @@ function PrinterContent() {
 
   useEffect(() => {
     if (manualDuplexHook?.expiresAt) {
+      let hasTrackedExtendAvailable = false;
       const updateTimer = () => {
         const remaining = Math.max(
           0,
           parseGMTDate(manualDuplexHook.expiresAt).getTime() - Date.now(),
         );
         setTimeLeft(remaining);
+
+        const extendWindow = (manualDuplexHook.extendWindowSeconds ?? 180) * 1000;
+        if (!hasTrackedExtendAvailable && remaining > 0 && remaining <= extendWindow) {
+          track.manualDuplexExtendAvailable(id || '');
+          hasTrackedExtendAvailable = true;
+        }
+
         if (remaining === 0) {
+          track.manualDuplexExpiredClient(id || '');
           setManualDuplexHook(null);
           setIsJobsModalOpen(true);
         }
@@ -467,7 +477,7 @@ function PrinterContent() {
     } else {
       setTimeLeft(null); // eslint-disable-line react-hooks/set-state-in-effect -- reset derived timer
     }
-  }, [manualDuplexHook]);
+  }, [manualDuplexHook, id]);
 
   const duplexActionInProgress = submittingDuplex || extendingDuplex;
   const canExtendManualDuplex =
@@ -498,6 +508,7 @@ function PrinterContent() {
     }
 
     const controller = new AbortController();
+    const startTime = performance.now();
 
     const fetchPreview = async () => {
       setPreviewLoading(true);
@@ -555,6 +566,16 @@ function PrinterContent() {
         setPreviewPageCount(totalPages);
         setPreviewImages(images);
         setPageDimensions(dims);
+
+        track.previewCompleted({
+          source: sourceTab,
+          batch: batchMode,
+          duplex: duplex as 'off' | 'auto' | 'manual',
+          nup,
+          success: true,
+          durationMs: Math.round(performance.now() - startTime),
+          pageCount: totalPages,
+        });
       } catch (err: unknown) {
         // Ignore cancellation errors from rapid file changes.
         if (
@@ -575,16 +596,33 @@ function PrinterContent() {
         });
 
         let msg = t("printer.previewLoadFailed");
+        let errorType = 'unknown';
         if (err instanceof Error) msg = err.message;
         const anyErr = err as {
           response?: { status?: number; data?: { error?: string } };
+          code?: string;
         };
-        if (anyErr.response?.status === 403) {
+        if (anyErr.code === 'ECONNABORTED' || anyErr.code === 'ERR_CANCELED') {
+          errorType = 'timeout';
+        } else if (anyErr.response?.status === 403) {
           msg = t("printer.feishuForbidden");
+          errorType = 'network';
+        } else if (anyErr.response?.status === 415) {
+          errorType = 'unsupported';
         } else if (anyErr.response?.data?.error) {
           msg = anyErr.response.data.error;
+          errorType = 'conversion';
         }
         setPreviewError(msg);
+
+        track.previewCompleted({
+          source: sourceTab,
+          batch: batchMode,
+          duplex: duplex as 'off' | 'auto' | 'manual',
+          nup,
+          success: false,
+          errorType,
+        });
       } finally {
         setPreviewLoading(false);
       }
@@ -608,6 +646,8 @@ function PrinterContent() {
     id,
     previewVersion,
     t,
+    duplex,
+    nup,
   ]);
 
   useEffect(() => {
@@ -689,11 +729,21 @@ function PrinterContent() {
         const saved = localStorage.getItem("duplex_preference");
         setDuplex(saved ?? "");
 
+        track.printerViewed(
+          printerInfo.id,
+          printerInfo.duplex_mode,
+          !!printerInfo.active_job_warning
+        );
+
         const warning = printerInfo.active_job_warning;
         if (warning) {
           const warningKey = activeJobWarningKey(id, warning);
           if (!acknowledgedPrinterWarningsRef.current.has(warningKey)) {
             const userName = activeJobWarningUser(warning);
+            const warningType = warning.type === 'manual_duplex_hook' ? 'manual_duplex' : 'printing';
+
+            track.printerActiveWarningShown(printerInfo.id, warningType);
+
             confirm({
               title: t("printer.activeJobWarningTitle"),
               message: (
@@ -711,8 +761,12 @@ function PrinterContent() {
               cancelText: t("printer.warningBack"),
               onConfirm: () => {
                 acknowledgedPrinterWarningsRef.current.add(warningKey);
+                track.printerActiveWarningIgnored(printerInfo.id, warningType);
               },
-              onCancel: () => router("/printers"),
+              onCancel: () => {
+                track.printerActiveWarningBack(printerInfo.id, warningType);
+                router("/printers");
+              },
             });
           }
         }
@@ -757,6 +811,10 @@ function PrinterContent() {
       const toAdd = valid.slice(0, available);
       if (valid.length > available) {
         toast({ message: t("printer.imageLimitReached"), type: "error" });
+      }
+      const newTotal = prev.length + toAdd.length;
+      if (toAdd.length > 0) {
+        track.batchFileAdded("image", newTotal);
       }
       return [...prev, ...toAdd];
     });
@@ -805,6 +863,10 @@ function PrinterContent() {
       const toAdd = docs.slice(0, available);
       if (docs.length > available) {
         toast({ message: t("printer.batchFileLimitReached"), type: "error" });
+      }
+      const newTotal = prev.length + toAdd.length;
+      if (toAdd.length > 0) {
+        track.batchFileAdded("doc", newTotal);
       }
       return [...prev, ...toAdd];
     });
@@ -891,6 +953,7 @@ function PrinterContent() {
         handleAddImages(images);
         setBatchType("image");
         setBatchMode(true);
+        track.batchEnabled("image");
       } else {
         handleAddImages(images);
       }
@@ -915,6 +978,7 @@ function PrinterContent() {
           });
         }
         setBatchMode(true);
+        track.batchEnabled("doc");
       } else {
         setImageFiles([]);
         setBatchFiles([]);
@@ -988,6 +1052,7 @@ function PrinterContent() {
   const handleOpenDocPicker = () => {
     dismissDocPickerGuide();
     setPickerLoading(true);
+    track.feishuPickerOpened();
     openDocPicker({
       success(files) {
         if (files.length === 0) return;
@@ -998,11 +1063,14 @@ function PrinterContent() {
         } else {
           setFeishuUrlError("");
         }
+        track.feishuPickerCompleted(true);
       },
       fail(err) {
         if (!/(cancel|denied|internal.?error)/i.test(err)) {
           toast({ message: err, type: "error" });
         }
+        const errorType = /(cancel|denied)/i.test(err) ? 'cancel' : /internal/i.test(err) ? 'internal' : 'unknown';
+        track.feishuPickerCompleted(false, errorType);
       },
       complete() {
         setPickerLoading(false);
@@ -1216,10 +1284,30 @@ function PrinterContent() {
             extendWindowSeconds: response.data.hook_extend_window_seconds,
           });
           toast({ message: t("printer.manualDuplexWait"), type: "success" });
+          track.manualDuplexWaitShown(id || '', response.data.hook_extend_window_seconds);
         } else {
           toast({ message: t("printer.success"), type: "success" });
           setIsJobsModalOpen(true);
         }
+
+        const getPageRange = (): 'all' | 'odd' | 'even' | 'custom' => {
+          if (pageSet === 'custom') return 'custom';
+          return pageSet;
+        };
+
+        track.printSubmitted({
+          source: sourceTab,
+          batch: false,
+          batchType: 'none',
+          fileType: file ? getFileExtension(file.name) : 'feishu',
+          copies,
+          duplex: duplex as 'off' | 'auto' | 'manual',
+          nup,
+          pageRange: getPageRange(),
+          scale,
+          success: true,
+          manualDuplex: !!response.data.hook_url,
+        });
       } else {
         const body: Record<string, unknown> = {
           url: feishuUrl.trim(),
@@ -1248,10 +1336,30 @@ function PrinterContent() {
             extendWindowSeconds: response.data.hook_extend_window_seconds,
           });
           toast({ message: t("printer.manualDuplexWait"), type: "success" });
+          track.manualDuplexWaitShown(id || '', response.data.hook_extend_window_seconds);
         } else {
           toast({ message: t("printer.success"), type: "success" });
           setIsJobsModalOpen(true);
         }
+
+        const getPageRange = (): 'all' | 'odd' | 'even' | 'custom' => {
+          if (pageSet === 'custom') return 'custom';
+          return pageSet;
+        };
+
+        track.printSubmitted({
+          source: sourceTab,
+          batch: false,
+          batchType: 'none',
+          fileType: 'feishu',
+          copies,
+          duplex: duplex as 'off' | 'auto' | 'manual',
+          nup,
+          pageRange: getPageRange(),
+          scale,
+          success: true,
+          manualDuplex: !!response.data.hook_url,
+        });
       }
     } catch (err: unknown) {
       const errStatus = (err as { response?: { status?: number } }).response
@@ -1261,6 +1369,25 @@ function PrinterContent() {
       toast({
         message: `${t("error.submit")}: ${apiErrMsg(err, fallback)}`,
         type: "error",
+      });
+
+      const getPageRange = (): 'all' | 'odd' | 'even' | 'custom' => {
+        if (pageSet === 'custom') return 'custom';
+        return pageSet;
+      };
+
+      track.printSubmitted({
+        source: sourceTab,
+        batch: false,
+        batchType: 'none',
+        fileType: sourceTab === 'file' && file ? getFileExtension(file.name) : 'feishu',
+        copies,
+        duplex: duplex as 'off' | 'auto' | 'manual',
+        nup,
+        pageRange: getPageRange(),
+        scale,
+        success: false,
+        errorType: errStatus === 403 ? 'forbidden' : 'network',
       });
     } finally {
       setSubmitting(false);
@@ -1345,11 +1472,13 @@ function PrinterContent() {
 
       toast({ message: t("printer.success"), type: "success" });
       setIsJobsModalOpen(true);
+      track.batchCompleted("image", imageFiles.length, 1, 0);
     } catch (err: unknown) {
       toast({
         message: `${t("error.submit")}: ${apiErrMsg(err, t("error.submit"))}`,
         type: "error",
       });
+      track.batchCompleted("image", imageFiles.length, 0, 1);
     } finally {
       setSubmitting(false);
       if (isInFeishu()) disableLeaveConfirm();
@@ -1446,6 +1575,8 @@ function PrinterContent() {
     setBatchProgress(null);
     if (isInFeishu()) disableLeaveConfirm();
 
+    track.batchCompleted("doc", batchFiles.length, successCount, failCount);
+
     if (failCount === 0) {
       toast({
         message: t("printer.batchSuccess", { count: successCount }),
@@ -1468,6 +1599,7 @@ function PrinterContent() {
 
   const handleContinueDuplex = async () => {
     if (!manualDuplexHook) return;
+    track.manualDuplexContinue(id || '');
     setSubmittingDuplex(true);
     if (isInFeishu()) enableLeaveConfirm();
     try {
@@ -1488,6 +1620,7 @@ function PrinterContent() {
 
   const handleCancelDuplex = async () => {
     if (!manualDuplexHook) return;
+    track.manualDuplexCancel(id || '');
     setSubmittingDuplex(true);
     try {
       await api.post(manualDuplexHook.url.replace("/continue", "/cancel"));
@@ -1521,11 +1654,13 @@ function PrinterContent() {
             extendWindowSeconds: response.data.hook_extend_window_seconds,
           });
           toast({ message: t("printer.duplexExtended"), type: "success" });
+          track.manualDuplexExtend(id || '', true);
         } catch (err: unknown) {
           toast({
             message: `${t("error.submit")}: ${apiErrMsg(err, t("error.submit"))}`,
             type: "error",
           });
+          track.manualDuplexExtend(id || '', false, 'network');
         } finally {
           setExtendingDuplex(false);
         }

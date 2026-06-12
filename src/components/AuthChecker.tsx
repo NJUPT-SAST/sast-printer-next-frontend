@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import api from "@/lib/api";
+import { track } from "@/lib/analytics";
 
 export default function AuthChecker({
   children,
@@ -37,6 +38,7 @@ export default function AuthChecker({
             window.location.pathname,
           );
           setIsAuthenticated(true);
+          track.authLoginSuccess();
         } catch (err) {
           console.error("Login failed", err);
           setError("登录失败，请重新进入应用");
@@ -46,6 +48,7 @@ export default function AuthChecker({
             document.title,
             window.location.pathname,
           );
+          track.authLoginFailed("code_exchange_failed");
         } finally {
           isLoggingIn.current = false;
         }

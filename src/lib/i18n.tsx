@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useEffect } from "react";
 import translationsData from "./i18n.json";
+import { track } from "./analytics";
 
 type Locale = "zh" | "en";
 
@@ -45,6 +46,7 @@ export const LanguageProvider = ({
     setLocaleState(newLocale);
     localStorage.setItem("lang", newLocale);
     document.documentElement.lang = newLocale; // Update html lang attribute
+    track.uiLanguageChanged(newLocale);
   };
 
   const t = (

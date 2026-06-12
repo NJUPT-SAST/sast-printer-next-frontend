@@ -36,6 +36,7 @@ import {
   type PageDimensions,
 } from "@/components/DocumentPreview";
 import Select from "@/components/Select";
+import { track } from "@/lib/analytics";
 
 const IMAGE_PREVIEW_MAX_EDGE = 1800;
 const IMAGE_PREVIEW_MAX_PIXELS = 2_500_000;
@@ -271,6 +272,8 @@ export default function ScannerPage() {
 
       setDevices(devs);
 
+      track.scanDeviceDiscovered(devs.length);
+
       if (devs.length === 1) {
         setSelectedScannerId(devs[0].id);
       } else if (
@@ -390,6 +393,7 @@ export default function ScannerPage() {
 
   const handleScan = async () => {
     if (!selectedScannerId) return;
+    track.scanStarted();
     try {
       setScanning(true);
       if (isInFeishu()) enableLeaveConfirm();
@@ -468,6 +472,7 @@ export default function ScannerPage() {
   const handleDownload = () => {
     if (!imageUrl) return;
     downloadFile(imageUrl, previewFilename || `scan-${Date.now()}.jpg`);
+    track.scanFileDownloaded();
   };
 
   const handleDownloadFile = async (file: ScanFile) => {
@@ -476,6 +481,7 @@ export default function ScannerPage() {
       const url = URL.createObjectURL(blob);
       downloadFile(url, getScanFileDisplayName(file));
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      track.scanFileDownloaded();
     } catch (err) {
       console.error(err);
       toast({
@@ -499,6 +505,7 @@ export default function ScannerPage() {
             type: "success",
           });
           fetchFiles();
+          track.scanFileDeleted();
         } catch (err) {
           console.error(err);
           toast({

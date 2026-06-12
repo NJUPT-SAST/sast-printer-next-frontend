@@ -4,6 +4,7 @@ import { useTranslation } from "@/lib/i18n";
 import { apiErrMsg } from "@/lib/utils";
 import { Printer as PrinterIcon, AlertCircle } from "lucide-react";
 import { Link } from "react-router-dom";
+import { track } from "@/lib/analytics";
 
 interface Printer {
   id: string;
@@ -30,7 +31,9 @@ export default function PrinterList({
     const fetchPrinters = async () => {
       try {
         const response = await api.get("/printers");
-        setPrinters(response.data.printers || []);
+        const printerList = response.data.printers || [];
+        setPrinters(printerList);
+        track.printerListViewed(printerList.length);
       } catch (err: unknown) {
         setError(apiErrMsg(err, t("error.fetchPrinters")));
       } finally {
