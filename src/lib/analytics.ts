@@ -9,19 +9,19 @@ const bucket = {
 export const track = {
   // Printer
   printerListViewed: (count: number) =>
-    umami?.track('printer:list_viewed', { printer_count: count }),
+    window.umami?.track('printer:list_viewed', { printer_count: count }),
 
   printerViewed: (printerId: string, duplexMode: string, hasActiveWarning: boolean) =>
-    umami?.track('printer:viewed', { printer_id: printerId, duplex_mode: duplexMode, has_active_warning: hasActiveWarning }),
+    window.umami?.track('printer:viewed', { printer_id: printerId, duplex_mode: duplexMode, has_active_warning: hasActiveWarning }),
 
   printerActiveWarningShown: (printerId: string, warningType: 'printing' | 'manual_duplex') =>
-    umami?.track('printer:active_warning_shown', { printer_id: printerId, warning_type: warningType }),
+    window.umami?.track('printer:active_warning_shown', { printer_id: printerId, warning_type: warningType }),
 
   printerActiveWarningIgnored: (printerId: string, warningType: string) =>
-    umami?.track('printer:active_warning_ignored', { printer_id: printerId, warning_type: warningType }),
+    window.umami?.track('printer:active_warning_ignored', { printer_id: printerId, warning_type: warningType }),
 
   printerActiveWarningBack: (printerId: string, warningType: string) =>
-    umami?.track('printer:active_warning_back', { printer_id: printerId, warning_type: warningType }),
+    window.umami?.track('printer:active_warning_back', { printer_id: printerId, warning_type: warningType }),
 
   // Preview
   previewCompleted: (opts: {
@@ -34,7 +34,7 @@ export const track = {
     pageCount?: number;
     errorType?: string;
   }) =>
-    umami?.track('preview:completed', {
+    window.umami?.track('preview:completed', {
       source: opts.source,
       batch: opts.batch,
       duplex: opts.duplex,
@@ -60,7 +60,7 @@ export const track = {
     manualDuplex?: boolean;
     errorType?: string;
   }) =>
-    umami?.track('print:submitted', {
+    window.umami?.track('print:submitted', {
       source: opts.source,
       batch: opts.batch,
       batch_type: opts.batchType,
@@ -77,63 +77,63 @@ export const track = {
 
   // Manual duplex
   manualDuplexWaitShown: (printerId: string, extendWindowSeconds?: number) =>
-    umami?.track('manual_duplex:wait_shown', { printer_id: printerId, ...(extendWindowSeconds && { extend_window_seconds: extendWindowSeconds }) }),
+    window.umami?.track('manual_duplex:wait_shown', { printer_id: printerId, ...(extendWindowSeconds && { extend_window_seconds: extendWindowSeconds }) }),
 
   manualDuplexExtendAvailable: (printerId: string) =>
-    umami?.track('manual_duplex:extend_available', { printer_id: printerId }),
+    window.umami?.track('manual_duplex:extend_available', { printer_id: printerId }),
 
   manualDuplexExtend: (printerId: string, success: boolean, errorType?: string) =>
-    umami?.track('manual_duplex:extend', { printer_id: printerId, success, ...(!success && errorType && { error_type: errorType }) }),
+    window.umami?.track('manual_duplex:extend', { printer_id: printerId, success, ...(!success && errorType && { error_type: errorType }) }),
 
   manualDuplexContinue: (printerId: string) =>
-    umami?.track('manual_duplex:continue', { printer_id: printerId }),
+    window.umami?.track('manual_duplex:continue', { printer_id: printerId }),
 
   manualDuplexCancel: (printerId: string) =>
-    umami?.track('manual_duplex:cancel', { printer_id: printerId }),
+    window.umami?.track('manual_duplex:cancel', { printer_id: printerId }),
 
   manualDuplexExpiredClient: (printerId: string) =>
-    umami?.track('manual_duplex:expired_client', { printer_id: printerId }),
+    window.umami?.track('manual_duplex:expired_client', { printer_id: printerId }),
 
   // Batch
   batchEnabled: (batchType: 'image' | 'doc') =>
-    umami?.track('batch:enabled', { batch_type: batchType }),
+    window.umami?.track('batch:enabled', { batch_type: batchType }),
 
   batchFileAdded: (batchType: string, count: number) =>
-    umami?.track('batch:file_added', { batch_type: batchType, count_bucket: bucket.fileCount(count) }),
+    window.umami?.track('batch:file_added', { batch_type: batchType, count_bucket: bucket.fileCount(count) }),
 
   batchCompleted: (batchType: string, fileCount: number, successCount: number, failedCount: number) =>
-    umami?.track('batch:completed', { batch_type: batchType, file_count_bucket: bucket.fileCount(fileCount), success_count: successCount, failed_count: failedCount }),
+    window.umami?.track('batch:completed', { batch_type: batchType, file_count_bucket: bucket.fileCount(fileCount), success_count: successCount, failed_count: failedCount }),
 
   // Feishu
   feishuPickerOpened: () =>
-    umami?.track('feishu_picker:opened'),
+    window.umami?.track('feishu_picker:opened'),
 
   feishuPickerCompleted: (success: boolean, errorType?: string) =>
-    umami?.track('feishu_picker:completed', { success, ...(!success && errorType && { error_type: errorType }) }),
+    window.umami?.track('feishu_picker:completed', { success, ...(!success && errorType && { error_type: errorType }) }),
 
   // Scan
   scanDeviceDiscovered: (count: number) =>
-    umami?.track('scan:device_discovered', { count }),
+    window.umami?.track('scan:device_discovered', { count }),
 
   scanStarted: () =>
-    umami?.track('scan:started'),
+    window.umami?.track('scan:started'),
 
   scanFileDownloaded: () =>
-    umami?.track('scan:file_downloaded'),
+    window.umami?.track('scan:file_downloaded'),
 
   scanFileDeleted: () =>
-    umami?.track('scan:file_deleted'),
+    window.umami?.track('scan:file_deleted'),
 
   // Auth
   authLoginSuccess: () =>
-    umami?.track('auth:login_success'),
+    window.umami?.track('auth:login_success'),
 
   authLoginFailed: (reason?: string) =>
-    umami?.track('auth:login_failed', reason ? { reason } : undefined),
+    window.umami?.track('auth:login_failed', reason ? { reason } : undefined),
 
   // UI
   uiLanguageChanged: (lang: string) =>
-    umami?.track('ui:language_changed', { language: lang }),
+    window.umami?.track('ui:language_changed', { language: lang }),
 };
 
 declare global {
@@ -142,5 +142,4 @@ declare global {
       track: (eventName: string, eventData?: EventData) => void;
     };
   }
-  const umami: Window['umami'];
 }
