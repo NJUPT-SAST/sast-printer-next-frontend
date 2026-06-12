@@ -27,12 +27,9 @@ export const downloadFile = (url: string, filename: string): void => {
 };
 
 export const createApiClient = (baseURL: string): AxiosInstance => {
-  const client = axios.create({ baseURL });
-
-  client.interceptors.request.use((config) => {
-    const token = localStorage.getItem("token");
-    if (token) config.headers.Authorization = `Bearer ${token}`;
-    return config;
+  const client = axios.create({
+    baseURL,
+    withCredentials: true, // Enable cookie-based session
   });
 
   client.interceptors.response.use(
@@ -44,7 +41,7 @@ export const createApiClient = (baseURL: string): AxiosInstance => {
           await new Promise((resolve) => setTimeout(resolve, 500));
           return client(error.config);
         }
-        localStorage.removeItem("token");
+        // Session expired, redirect to login
         window.location.href = "/";
       }
       return Promise.reject(error);

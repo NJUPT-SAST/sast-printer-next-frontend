@@ -13,14 +13,7 @@ export default function AuthChecker({
 
   useEffect(() => {
     const handleAuth = async () => {
-      // 1. Check existing token
-      const token = localStorage.getItem("token");
-      if (token) {
-        setIsAuthenticated(true);
-        return;
-      }
-
-      // 2. Check for code in URL
+      // 1. Check for code in URL (OAuth callback)
       const urlParams = new URLSearchParams(window.location.search);
       const code = urlParams.get("code");
 
@@ -28,8 +21,8 @@ export default function AuthChecker({
         if (isLoggingIn.current) return;
         isLoggingIn.current = true;
         try {
-          const res = await api.post("/auth/config/code-login", { code });
-          localStorage.setItem("token", res.data.access_token);
+          // Exchange code for session (backend sets session cookie)
+          await api.post("/auth/config/code-login", { code });
           window.dispatchEvent(new Event("auth-changed"));
           // Remove code from URL
           window.history.replaceState(
@@ -53,6 +46,16 @@ export default function AuthChecker({
           isLoggingIn.current = false;
         }
         return;
+      }
+
+      // 2. Check if already authenticated via session
+      try {
+        // Call a lightweight endpoint to verify session
+        await api.get("/auth/session");
+        setIsAuthenticated(true);
+        return;
+      } catch {
+        // Not authenticated, continue to redirect
       }
 
       // 3. Need to redirect to Feishu OAuth
