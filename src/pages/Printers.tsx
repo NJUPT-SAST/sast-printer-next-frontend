@@ -24,6 +24,7 @@ import {
   Upload,
   ArrowLeftRight,
   ArrowUpDown,
+  File,
 } from "lucide-react";
 import Select from "@/components/Select";
 import { Link } from "react-router-dom";
@@ -2425,9 +2426,9 @@ function PrinterContent() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {t("common.duplex")} <span className="text-red-500">*</span>
                 </label>
-                <div className="flex flex-col gap-2">
+                <div className="grid grid-cols-3 gap-3">
                   <label
-                    className={`flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${duplex === "off" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:bg-gray-50"}`}
+                    className={`flex flex-col items-center justify-center py-3 px-3 border rounded-xl cursor-pointer transition-colors ${duplex === "off" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:bg-gray-50"}`}
                   >
                     <input
                       type="radio"
@@ -2435,15 +2436,16 @@ function PrinterContent() {
                       value="off"
                       checked={duplex === "off"}
                       onChange={() => setDuplex("off")}
-                      className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                      className="sr-only"
                     />
-                    <span className="ml-3 block text-sm font-medium text-gray-900">
+                    <File className="w-5 h-5 text-gray-400 mb-1" />
+                    <span className="text-sm font-medium text-gray-900">
                       {t("printer.simplex")}
                     </span>
                   </label>
 
                   <label
-                    className={`flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${duplex === "long-edge" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:bg-gray-50"} ${printer?.duplex_mode === "off" || isDuplexDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                    className={`flex flex-col items-center justify-center py-3 px-3 border rounded-xl cursor-pointer transition-colors ${duplex === "long-edge" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:bg-gray-50"} ${printer?.duplex_mode === "off" || isDuplexDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
                     <input
                       type="radio"
@@ -2454,27 +2456,23 @@ function PrinterContent() {
                       disabled={
                         printer?.duplex_mode === "off" || isDuplexDisabled
                       }
-                      className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 disabled:opacity-50"
+                      className="sr-only"
                     />
-                    <div className="ml-3 flex items-center gap-2">
-                      <ArrowUpDown className="w-4 h-4 text-gray-400" />
-                      <div>
-                        <span className="block text-sm font-medium text-gray-900">
-                          {t("printer.longEdge")}
-                        </span>
-                        <span className="block text-xs text-gray-500">
-                          {t(
-                            printer?.duplex_mode === "auto"
-                              ? "printer.auto"
-                              : "printer.manual",
-                          )}
-                        </span>
-                      </div>
-                    </div>
+                    <ArrowUpDown className="w-5 h-5 text-gray-400 mb-1" />
+                    <span className="text-sm font-medium text-gray-900">
+                      {t("printer.longEdge")}
+                    </span>
+                    <span className="text-xs text-gray-500 mt-0.5">
+                      {t(
+                        printer?.duplex_mode === "auto"
+                          ? "printer.auto"
+                          : "printer.manual",
+                      )}
+                    </span>
                   </label>
 
                   <label
-                    className={`flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${duplex === "short-edge" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:bg-gray-50"} ${printer?.duplex_mode === "off" || isDuplexDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                    className={`flex flex-col items-center justify-center py-3 px-3 border rounded-xl cursor-pointer transition-colors ${duplex === "short-edge" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:bg-gray-50"} ${printer?.duplex_mode === "off" || isDuplexDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
                     <input
                       type="radio"
@@ -2485,23 +2483,19 @@ function PrinterContent() {
                       disabled={
                         printer?.duplex_mode === "off" || isDuplexDisabled
                       }
-                      className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 disabled:opacity-50"
+                      className="sr-only"
                     />
-                    <div className="ml-3 flex items-center gap-2">
-                      <ArrowLeftRight className="w-4 h-4 text-gray-400" />
-                      <div>
-                        <span className="block text-sm font-medium text-gray-900">
-                          {t("printer.shortEdge")}
-                        </span>
-                        <span className="block text-xs text-gray-500">
-                          {t(
-                            printer?.duplex_mode === "auto"
-                              ? "printer.auto"
-                              : "printer.manual",
-                          )}
-                        </span>
-                      </div>
-                    </div>
+                    <ArrowLeftRight className="w-5 h-5 text-gray-400 mb-1" />
+                    <span className="text-sm font-medium text-gray-900">
+                      {t("printer.shortEdge")}
+                    </span>
+                    <span className="text-xs text-gray-500 mt-0.5">
+                      {t(
+                        printer?.duplex_mode === "auto"
+                          ? "printer.auto"
+                          : "printer.manual",
+                      )}
+                    </span>
                   </label>
                 </div>
                 {isDuplexDisabled && (
