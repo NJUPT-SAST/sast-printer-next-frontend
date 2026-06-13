@@ -36,6 +36,16 @@ export const createApiClient = (baseURL: string): AxiosInstance => {
     (response) => response,
     async (error) => {
       if (error.response?.status === 401) {
+        const requestUrl = error.config?.url || '';
+
+        // Skip auto-redirect for auth check endpoints - they handle 401 themselves
+        const isAuthCheckEndpoint = requestUrl.includes('/auth/session') ||
+                                     requestUrl.includes('/auth/config');
+
+        if (isAuthCheckEndpoint) {
+          return Promise.reject(error);
+        }
+
         if (!error.config._retry) {
           error.config._retry = true;
           await new Promise((resolve) => setTimeout(resolve, 500));
