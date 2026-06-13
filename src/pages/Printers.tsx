@@ -683,7 +683,7 @@ function PrinterContent() {
   }, [imageFiles, batchMode, toast, t]);
 
   useEffect(() => {
-    if (isDuplexDisabled && duplex === "true") {
+    if (isDuplexDisabled && (duplex === "true" || duplex === "long-edge" || duplex === "short-edge")) {
       setDuplex("off"); // eslint-disable-line react-hooks/set-state-in-effect -- auto-correct duplex for single page
     }
   }, [duplex, isDuplexDisabled]);
@@ -727,7 +727,9 @@ function PrinterContent() {
         const printerInfo = response.data;
         setPrinter(printerInfo);
         const saved = localStorage.getItem("duplex_preference");
-        setDuplex(saved ?? "");
+        // 兼容旧值 "true"，转换为 "long-edge"
+        const normalizedDuplex = saved === "true" ? "long-edge" : saved;
+        setDuplex(normalizedDuplex ?? "");
 
         track.printerViewed(
           printerInfo.id,
@@ -1317,7 +1319,7 @@ function PrinterContent() {
           collate: collate === "true",
         };
         if (duplex !== "off") {
-          body.duplex = duplex === "true";
+          body.duplex = true; // 飞书打印只需要传递boolean
         }
         if (finalPages) {
           body.pages = finalPages;
@@ -2423,9 +2425,9 @@ function PrinterContent() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {t("common.duplex")} <span className="text-red-500">*</span>
                 </label>
-                <div className="flex gap-4">
+                <div className="flex flex-col gap-2">
                   <label
-                    className={`flex-1 flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${duplex === "off" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:bg-gray-50"}`}
+                    className={`flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${duplex === "off" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:bg-gray-50"}`}
                   >
                     <input
                       type="radio"
@@ -2441,30 +2443,64 @@ function PrinterContent() {
                   </label>
 
                   <label
-                    className={`flex-1 flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${duplex === "true" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:bg-gray-50"} ${printer?.duplex_mode === "off" || isDuplexDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                    className={`flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${duplex === "long-edge" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:bg-gray-50"} ${printer?.duplex_mode === "off" || isDuplexDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
                     <input
                       type="radio"
                       name="duplex"
-                      value="true"
-                      checked={duplex === "true"}
-                      onChange={() => setDuplex("true")}
+                      value="long-edge"
+                      checked={duplex === "long-edge"}
+                      onChange={() => setDuplex("long-edge")}
                       disabled={
                         printer?.duplex_mode === "off" || isDuplexDisabled
                       }
                       className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 disabled:opacity-50"
                     />
-                    <div className="ml-3">
-                      <span className="block text-sm font-medium text-gray-900">
-                        {t("printer.doubleSided")}
-                      </span>
-                      <span className="block text-xs text-gray-500">
-                        {t(
-                          printer?.duplex_mode === "auto"
-                            ? "printer.auto"
-                            : "printer.manual",
-                        )}
-                      </span>
+                    <div className="ml-3 flex items-center gap-2">
+                      <ArrowUpDown className="w-4 h-4 text-gray-400" />
+                      <div>
+                        <span className="block text-sm font-medium text-gray-900">
+                          {t("printer.longEdge")}
+                        </span>
+                        <span className="block text-xs text-gray-500">
+                          {t(
+                            printer?.duplex_mode === "auto"
+                              ? "printer.auto"
+                              : "printer.manual",
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`flex items-center py-2 px-3 border rounded-xl cursor-pointer transition-colors ${duplex === "short-edge" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:bg-gray-50"} ${printer?.duplex_mode === "off" || isDuplexDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    <input
+                      type="radio"
+                      name="duplex"
+                      value="short-edge"
+                      checked={duplex === "short-edge"}
+                      onChange={() => setDuplex("short-edge")}
+                      disabled={
+                        printer?.duplex_mode === "off" || isDuplexDisabled
+                      }
+                      className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500 disabled:opacity-50"
+                    />
+                    <div className="ml-3 flex items-center gap-2">
+                      <ArrowLeftRight className="w-4 h-4 text-gray-400" />
+                      <div>
+                        <span className="block text-sm font-medium text-gray-900">
+                          {t("printer.shortEdge")}
+                        </span>
+                        <span className="block text-xs text-gray-500">
+                          {t(
+                            printer?.duplex_mode === "auto"
+                              ? "printer.auto"
+                              : "printer.manual",
+                          )}
+                        </span>
+                      </div>
                     </div>
                   </label>
                 </div>
