@@ -962,6 +962,9 @@ function PrinterContent() {
         setBatchMode(true);
         track.batchEnabled("image");
       } else {
+        // Single image outside batch mode replaces any previously selected
+        // image rather than appending to it (appending is batch-only).
+        setImageFiles([]);
         handleAddImages(images);
       }
     } else {
@@ -1150,6 +1153,9 @@ function PrinterContent() {
         setBatchType("image");
         setBatchMode(true);
       } else {
+        // Single image outside batch mode replaces any previously selected
+        // image rather than appending to it (appending is batch-only).
+        setImageFiles([]);
         handleAddImages(images);
       }
     } else {
