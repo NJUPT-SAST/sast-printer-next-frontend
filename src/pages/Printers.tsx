@@ -24,7 +24,9 @@ import {
   Upload,
   RectangleHorizontal,
   RectangleVertical,
-  File,
+  ArrowLeftRight,
+  ArrowUpDown,
+  File as FileIcon,
 } from "lucide-react";
 import Select from "@/components/Select";
 import { Link } from "react-router-dom";
@@ -2440,7 +2442,7 @@ function PrinterContent() {
                       onChange={() => setDuplex("off")}
                       className="sr-only"
                     />
-                    <File className="w-5 h-5 text-gray-400 mb-1" />
+                    <FileIcon className="w-5 h-5 text-gray-400 mb-1" />
                     <span className="text-sm font-medium text-gray-900">
                       {t("printer.simplex")}
                     </span>
