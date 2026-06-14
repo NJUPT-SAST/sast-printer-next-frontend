@@ -22,8 +22,8 @@ import {
   FolderOpen,
   Settings,
   Upload,
-  RectangleHorizontal,
-  RectangleVertical,
+  SquareCenterlineDashedHorizontal,
+  SquareCenterlineDashedVertical,
   ArrowLeftRight,
   ArrowUpDown,
   File as FileIcon,
@@ -2462,7 +2462,7 @@ function PrinterContent() {
                       }
                       className="sr-only"
                     />
-                    <RectangleHorizontal className="w-5 h-5 text-gray-400 mb-1" />
+                    <SquareCenterlineDashedHorizontal className="w-5 h-5 text-gray-400 mb-1" />
                     <span className="text-sm font-medium text-gray-900">
                       {t("printer.longEdge")}
                     </span>
@@ -2489,7 +2489,7 @@ function PrinterContent() {
                       }
                       className="sr-only"
                     />
-                    <RectangleVertical className="w-5 h-5 text-gray-400 mb-1" />
+                    <SquareCenterlineDashedVertical className="w-5 h-5 text-gray-400 mb-1" />
                     <span className="text-sm font-medium text-gray-900">
                       {t("printer.shortEdge")}
                     </span>
