@@ -361,9 +361,18 @@ function PrinterContent() {
     return pageList.length > 0 ? pageList : null;
   }, [pageSet, pages, previewPageCount, validatePageRange]);
   const selectedPageCount = selectedPages?.length ?? null;
+  // Physical sheets after N-up imposition (ceil of the printed source pages ÷
+  // nup). Duplex only makes sense with ≥2 sheets, so it's disabled otherwise —
+  // e.g. a 4-page document with 4-up still yields a single sheet.
+  const printedSourcePages = selectedPageCount ?? previewPageCount;
+  const effectiveSheetCount =
+    printedSourcePages == null
+      ? null
+      : nup > 1
+        ? Math.ceil(printedSourcePages / nup)
+        : printedSourcePages;
   const isDuplexDisabled =
-    (previewPageCount !== null && previewPageCount <= 1) ||
-    selectedPageCount === 1;
+    effectiveSheetCount !== null && effectiveSheetCount <= 1;
   const isNupDisabled =
     (previewPageCount !== null && previewPageCount <= 1) ||
     (selectedPageCount !== null && selectedPageCount <= 1);
