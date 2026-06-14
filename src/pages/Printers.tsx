@@ -22,8 +22,8 @@ import {
   FolderOpen,
   Settings,
   Upload,
-  ArrowLeftRight,
-  ArrowUpDown,
+  RectangleHorizontal,
+  RectangleVertical,
   File,
 } from "lucide-react";
 import Select from "@/components/Select";
@@ -730,7 +730,9 @@ function PrinterContent() {
         const saved = localStorage.getItem("duplex_preference");
         // 兼容旧值 "true"，转换为 "long-edge"
         const normalizedDuplex = saved === "true" ? "long-edge" : saved;
-        setDuplex(normalizedDuplex ?? "");
+        // 如果没有保存的偏好，根据打印机能力设置智能默认值
+        const defaultDuplex = printerInfo.duplex_mode !== "off" ? "long-edge" : "off";
+        setDuplex(normalizedDuplex ?? defaultDuplex);
 
         track.printerViewed(
           printerInfo.id,
@@ -2458,7 +2460,7 @@ function PrinterContent() {
                       }
                       className="sr-only"
                     />
-                    <ArrowUpDown className="w-5 h-5 text-gray-400 mb-1" />
+                    <RectangleHorizontal className="w-5 h-5 text-gray-400 mb-1" />
                     <span className="text-sm font-medium text-gray-900">
                       {t("printer.longEdge")}
                     </span>
@@ -2485,7 +2487,7 @@ function PrinterContent() {
                       }
                       className="sr-only"
                     />
-                    <ArrowLeftRight className="w-5 h-5 text-gray-400 mb-1" />
+                    <RectangleVertical className="w-5 h-5 text-gray-400 mb-1" />
                     <span className="text-sm font-medium text-gray-900">
                       {t("printer.shortEdge")}
                     </span>
