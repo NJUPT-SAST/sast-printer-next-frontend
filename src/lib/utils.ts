@@ -90,6 +90,22 @@ const normalizeImageToJpeg = (file: File): Promise<ArrayBuffer> =>
     img.src = objectUrl;
   });
 
+// Image formats the backend renders onto A4 directly. Other image types
+// (gif/webp/bmp) must be normalized to JPEG first.
+const BACKEND_IMAGE_EXTS = new Set(["png", "jpg", "jpeg"]);
+
+// Returns a single-image File ready for preview/submit: png/jpg/jpeg pass
+// through unchanged so the original filename and extension are preserved,
+// while unsupported types are normalized to JPEG.
+export const prepareImageFile = async (file: File): Promise<File> => {
+  const ext = getFileExtension(file.name);
+  if (BACKEND_IMAGE_EXTS.has(ext)) return file;
+  const buf = await normalizeImageToJpeg(file);
+  return new File([buf], file.name.replace(/\.[^.]+$/, "") + ".jpg", {
+    type: "image/jpeg",
+  });
+};
+
 export const imagesToPdf = async (files: File[]): Promise<Blob> => {
   const { PDFDocument } = await import("pdf-lib");
   const pdf = await PDFDocument.create();
