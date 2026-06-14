@@ -105,12 +105,26 @@ export const imagesToPdf = async (files: File[]): Promise<Blob> => {
       const buf = await normalizeImageToJpeg(file);
       image = await pdf.embedJpg(buf);
     }
-    const page = pdf.addPage([image.width, image.height]);
+    // Place each image on an A4 sheet, fit to 90% and centered. This mirrors
+    // the backend's ConvertImageToPDF so previews and prints always use A4
+    // paper regardless of the source image's aspect ratio.
+    const landscape = image.width > image.height;
+    const pageW = landscape ? A4.height : A4.width;
+    const pageH = landscape ? A4.width : A4.height;
+    const maxW = pageW * 0.9;
+    const maxH = pageH * 0.9;
+    let drawW = maxW;
+    let drawH = drawW * (image.height / image.width);
+    if (drawH > maxH) {
+      drawH = maxH;
+      drawW = drawH * (image.width / image.height);
+    }
+    const page = pdf.addPage([pageW, pageH]);
     page.drawImage(image, {
-      x: 0,
-      y: 0,
-      width: image.width,
-      height: image.height,
+      x: (pageW - drawW) / 2,
+      y: (pageH - drawH) / 2,
+      width: drawW,
+      height: drawH,
     });
   }
   const bytes = await pdf.save();
