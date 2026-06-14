@@ -669,7 +669,14 @@ function PrinterContent() {
       try {
         const blob = await imagesToPdf(imageFiles);
         if (!cancelled) {
-          setFile(new File([blob], "images.pdf", { type: "application/pdf" }));
+          // For a single image, keep the original filename (e.g. photo.jpg →
+          // photo.pdf) so the UI and submission reflect what the user picked;
+          // fall back to images.pdf only when merging multiple images.
+          const pdfName =
+            imageFiles.length === 1
+              ? imageFiles[0].name.replace(/\.[^.]+$/, "") + ".pdf"
+              : "images.pdf";
+          setFile(new File([blob], pdfName, { type: "application/pdf" }));
         }
       } catch (err: unknown) {
         if (!cancelled) {
